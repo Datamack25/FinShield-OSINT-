@@ -1152,8 +1152,8 @@ def analyze_local(entity: str, search_results_with_cat: list, scraped_texts: lis
 
         # At FL=0: every result from a negative query IS an alert
         # At FL>=1: only if entity is mentioned in title/snippet
-        #if filter_level >= 4 and not ent_found:
-            #continue
+        if filter_level >= 4 and not ent_found:
+            continue
 
         # Get category info from the query that produced this result
         cat_info = QUERY_CAT_INFO.get(query_cat, DEFAULT_CAT_INFO)
