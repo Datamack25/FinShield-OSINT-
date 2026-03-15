@@ -811,42 +811,134 @@ def check_opensanctions(name: str) -> dict:
     return {"found": False, "count": 0, "results": [], "error": "Non disponible"}
 
 def search_web(query: str, num: int = 8) -> list:
+    """Search via DuckDuckGo (primary) + Bing (fallback)."""
+    from bs4 import BeautifulSoup
     results = []
-    # DuckDuckGo
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+    # DuckDuckGo HTML
     try:
-        from bs4 import BeautifulSoup
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         r = requests.get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",
-                         headers=headers, timeout=10)
+                         headers={"User-Agent": ua}, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
         for item in soup.select(".result")[:num]:
             a = item.find("a", class_="result__a")
             snip = item.find("a", class_="result__snippet")
-            if a:
+            if a and a.get("href","").startswith("http"):
                 results.append({"title": a.get_text(strip=True),
                                  "url": a.get("href",""),
                                  "snippet": snip.get_text(strip=True) if snip else ""})
-    except:
-        pass
+    except: pass
     # Bing fallback
-    if not results:
+    if len(results) < 3:
         try:
-            from bs4 import BeautifulSoup
-            headers = {"User-Agent": "Mozilla/5.0"}
             r = requests.get(f"https://www.bing.com/search?q={quote_plus(query)}&count={num}",
-                              headers=headers, timeout=10)
+                              headers={"User-Agent": ua}, timeout=10)
             soup = BeautifulSoup(r.text, "html.parser")
             for li in soup.select("li.b_algo")[:num]:
-                h2 = li.find("h2")
-                a  = h2.find("a") if h2 else None
-                p  = li.find("p")
-                if a:
+                a = li.find("h2", recursive=False)
+                a = a.find("a") if a else li.find("a")
+                p = li.find("p")
+                if a and a.get("href","").startswith("http"):
                     results.append({"title": a.get_text(strip=True),
                                      "url": a.get("href",""),
                                      "snippet": p.get_text(strip=True) if p else ""})
-        except:
-            pass
-    return results
+        except: pass
+    return results[:num]
+
+
+def build_search_queries(entity: str) -> list:
+    """
+    Build 50+ targeted queries covering all requested sources:
+    press, social media, legal registries, review platforms, scam databases, sanctions.
+    Each query uses quoted entity name to force exact match.
+    """
+    e = entity  # keep original for quoted searches
+    queries = []
+
+    # ── PRESSE FRANÇAISE ─────────────────────────────────────────
+    queries += [
+        f'"{e}" fraude arnaque escroquerie',
+        f'"{e}" condamné condamnation tribunal correctionnel',
+        f'"{e}" mis en examen garde à vue perquisition',
+        f'"{e}" liquidation judiciaire redressement faillite dépôt de bilan',
+        f'"{e}" blanchiment argent financement terrorisme',
+        f'"{e}" corruption pot-de-vin détournement',
+        f'"{e}" sanction AMF ACPR Banque de France',
+        f'"{e}" mise en demeure interdiction',
+    ]
+    # ── PRESSE INTERNATIONALE ────────────────────────────────────
+    queries += [
+        f'"{e}" fraud scam money laundering',
+        f'"{e}" corruption bribery convicted sentenced',
+        f'"{e}" sanctions blacklist OFAC',
+        f'"{e}" criminal charges lawsuit indicted',
+    ]
+    # ── RÉSEAUX SOCIAUX ──────────────────────────────────────────
+    queries += [
+        f'site:twitter.com "{e}" arnaque fraude escroquerie',
+        f'site:twitter.com "{e}" scam fraud warning',
+        f'site:linkedin.com/in "{e}"',
+        f'site:facebook.com "{e}" arnaque plainte',
+        f'site:reddit.com "{e}" scam fraud arnaque',
+        f'site:instagram.com "{e}"',
+    ]
+    # ── AVIS ET NOTATIONS ────────────────────────────────────────
+    queries += [
+        f'site:trustpilot.com "{e}"',
+        f'site:trustpilot.com/review "{e}"',
+        f'site:avis-verifies.com "{e}"',
+        f'site:google.com/maps "{e}" avis',
+        f'site:glassdoor.com "{e}"',
+        f'"{e}" avis client plainte mauvaise expérience',
+        f'"{e}" note étoile déconseillé',
+    ]
+    # ── SIGNALEMENTS ARNAQUES ────────────────────────────────────
+    queries += [
+        f'site:signal-arnaques.com "{e}"',
+        f'site:cybermalveillance.gouv.fr "{e}"',
+        f'site:escroqueries.fr "{e}"',
+        f'site:arnaque-signal.fr "{e}"',
+        f'"{e}" site:forum-assurance.com',
+        f'"{e}" arnaque signalé victime témoignage',
+        f'"{e}" liste noire interdit bancaire',
+    ]
+    # ── REGISTRES LÉGAUX FRANÇAIS ────────────────────────────────
+    queries += [
+        f'site:infogreffe.fr "{e}"',
+        f'site:bodacc.fr "{e}"',
+        f'site:societe.com "{e}"',
+        f'site:verif.com "{e}"',
+        f'site:pappers.fr "{e}"',
+        f'site:tribunal-commerce.fr "{e}"',
+        f'site:legifrance.gouv.fr "{e}"',
+    ]
+    # ── JUSTICE ET PROCÉDURES ────────────────────────────────────
+    queries += [
+        f'site:justice.fr "{e}"',
+        f'site:courdecassation.fr "{e}"',
+        f'"{e}" jugement arrêt décision justice',
+        f'"{e}" procès pénal civil commercial',
+    ]
+    # ── SANCTIONS INTERNATIONALES ─────────────────────────────────
+    queries += [
+        f'site:opensanctions.org "{e}"',
+        f'site:sanctionsmap.eu "{e}"',
+        f'site:ofac.treas.gov "{e}"',
+        f'"{e}" EU sanctions OFAC UN blacklist',
+        f'site:acpr.banque-france.fr "{e}"',
+        f'site:amf-france.org "{e}"',
+    ]
+    # ── PRESSE SPÉCIALISÉE FINANCE ────────────────────────────────
+    queries += [
+        f'site:lesechos.fr "{e}"',
+        f'site:latribune.fr "{e}"',
+        f'site:bfmtv.com "{e}"',
+        f'site:capital.fr "{e}"',
+        f'site:reuters.com "{e}"',
+        f'site:bloomberg.com "{e}"',
+    ]
+
+    return queries
 
 def scrape_page(url: str, max_chars=3000) -> str:
     try:
@@ -951,192 +1043,222 @@ def _text_lower(s): return s.lower() if s else ""
 
 def analyze_local(entity: str, search_results: list, scraped_texts: list, os_result: dict) -> dict:
     """
-    Moteur d'analyse de risque 100% local, sans API payante.
-    Analyse les titres, snippets et textes scrapés par catégories de risque pondérées.
+    Moteur d analyse risque 100% local.
+    FILTRE STRICT : un signal n est compté QUE si le nom de l entite
+    apparait dans la meme fenetre de texte que le mot-cle risque.
+    Evite les faux positifs sur des articles generiques.
     """
-    entity_low = entity.lower()
-    scores_by_cat = {k: 0 for k in RISK_KEYWORDS}
-    hits_by_cat   = {k: [] for k in RISK_KEYWORDS}
+    # Prepare entity tokens for matching (full name + each word >= 4 chars)
+    entity_low   = entity.lower().strip()
+    entity_words = [w for w in entity_low.split() if len(w) >= 4]
+    # Also short versions: first word, last word
+    entity_tokens = list(set([entity_low] + entity_words))
+    if len(entity_words) >= 2:
+        entity_tokens.append(entity_words[0])   # first name / first word
+        entity_tokens.append(entity_words[-1])  # last name / last word
+
+    def entity_present(txt: str, window: int = 200) -> bool:
+        """Return True if any entity token appears in txt."""
+        t = txt.lower()
+        return any(tok in t for tok in entity_tokens)
+
+    def entity_near_kw(txt: str, kw_idx: int, window: int = 180) -> bool:
+        """Return True if entity token appears within `window` chars of keyword position."""
+        t = txt.lower()
+        ctx = t[max(0, kw_idx - window): kw_idx + window + len(entity_low)]
+        return any(tok in ctx for tok in entity_tokens)
+
+    scores_by_cat = {k: 0.0 for k in RISK_KEYWORDS}
     negative_news = []
     all_text_sources = []
 
-    # Combine all textual data
+    # Build source list — only include sources where entity name appears somewhere
     for r in search_results:
-        combined = f"{r.get('title','')} {r.get('snippet','')}"
+        combined = f"{r.get('title','')} {r.get('snippet','')}".strip()
+        if not combined:
+            continue
         domain = urlparse(r.get("url","")).netloc.replace("www.","")
-        cred = SOURCE_CREDIBILITY.get(domain, 1.0)
-        all_text_sources.append({"text": combined, "title": r.get("title",""),
-                                   "url": r.get("url",""), "domain": domain, "cred": cred})
-    for t in scraped_texts:
-        all_text_sources.append({"text": t, "title": "", "url": "", "domain": "", "cred": 1.0})
+        cred   = SOURCE_CREDIBILITY.get(domain, 1.0)
+        # Pre-filter: skip sources with zero mention of entity
+        if not entity_present(combined, window=500):
+            continue
+        all_text_sources.append({
+            "text": combined, "title": r.get("title",""),
+            "url": r.get("url",""), "domain": domain, "cred": cred,
+            "is_scrape": False
+        })
 
-    # Score each source against each category
+    for t in scraped_texts:
+        if not t or not entity_present(t, window=1000):
+            continue
+        all_text_sources.append({
+            "text": t, "title": "", "url": "", "domain": "", "cred": 1.0,
+            "is_scrape": True
+        })
+
+    # Score each entity-confirmed source
     for src in all_text_sources:
-        txt = _text_lower(src["text"])
+        txt_low = src["text"].lower()
         for cat, kws in RISK_KEYWORDS.items():
             cat_hits = []
             for kw, weight in kws.items():
-                if kw in txt:
-                    # Check entity name proximity (bonus if entity name nearby)
-                    idx = txt.find(kw)
-                    context_window = txt[max(0,idx-120):idx+120]
-                    proximity_bonus = 1.5 if entity_low[:6] in context_window else 1.0
-                    effective_weight = weight * src["cred"] * proximity_bonus
-                    cat_hits.append((kw, round(effective_weight, 1)))
-                    scores_by_cat[cat] += effective_weight
+                idx = txt_low.find(kw)
+                while idx != -1:
+                    # STRICT: entity must be within ±180 chars of keyword
+                    if entity_near_kw(txt_low, idx, window=180):
+                        effective = weight * src["cred"]
+                        cat_hits.append((kw, round(effective, 1)))
+                        scores_by_cat[cat] += effective
+                        break  # count keyword once per source
+                    idx = txt_low.find(kw, idx + 1)
 
-            # If negative hits and has title → candidate for negative_news
-            if cat not in ("positive",) and cat_hits and src.get("title"):
-                neg_score = sum(w for _,w in cat_hits)
-                if neg_score >= 3 and src.get("title"):
-                    # Determine nature
-                    nature_map = {"sanctions":"Sanction / Liste noire","fraud":"Fraude / Corruption",
-                                  "judicial":"Litige judiciaire","reputation":"Réputation négative","pep":"PEP"}
-                    gravite = "eleve" if neg_score >= 8 else ("moyen" if neg_score >= 4 else "faible")
+            # Build negative news entry
+            if cat != "positive" and cat_hits and src.get("title"):
+                neg_score = sum(w for _, w in cat_hits)
+                if neg_score >= 2.5:
+                    nature_map = {
+                        "sanctions": "Sanction / Liste noire",
+                        "fraud":     "Fraude / Corruption",
+                        "judicial":  "Litige judiciaire",
+                        "reputation":"Réputation négative",
+                        "pep":       "Exposition PEP"
+                    }
+                    gravite = "eleve" if neg_score >= 7 else ("moyen" if neg_score >= 4 else "faible")
                     negative_news.append({
-                        "titre": src["title"][:100],
-                        "source": src.get("domain",""),
-                        "url": src.get("url",""),
-                        "date": "",
-                        "nature": nature_map.get(cat, cat),
-                        "gravite": gravite,
-                        "mots_cles": [kw for kw,_ in cat_hits[:4]],
+                        "titre":     src["title"][:110],
+                        "source":    src.get("domain",""),
+                        "url":       src.get("url",""),
+                        "date":      "",
+                        "nature":    nature_map.get(cat, cat),
+                        "gravite":   gravite,
+                        "mots_cles": [kw for kw, _ in cat_hits[:4]],
                         "score_brut": round(neg_score, 1),
+                        "cat":       cat,
                     })
 
-    # Deduplicate negative_news by title similarity
+    # Deduplicate: keep highest-score per title prefix
     seen_titles = set()
     neg_dedup = []
     for n in sorted(negative_news, key=lambda x: x["score_brut"], reverse=True):
-        key = n["titre"][:40].lower()
+        key = n["titre"][:45].lower()
         if key not in seen_titles:
             seen_titles.add(key)
             neg_dedup.append(n)
 
-    # OpenSanctions adds to sanctions score heavily
+    # OpenSanctions: hard evidence, add directly
     if os_result.get("found"):
-        scores_by_cat["sanctions"] += os_result["count"] * 15
+        scores_by_cat["sanctions"] += os_result["count"] * 12
 
-    # Compute final risk score
-    raw_neg = (scores_by_cat["sanctions"] * 2.5 +
-               scores_by_cat["fraud"]     * 2.0 +
-               scores_by_cat["judicial"]  * 1.8 +
-               scores_by_cat["reputation"]* 1.0 +
-               scores_by_cat["pep"]       * 0.8)
-    positive_offset = scores_by_cat["positive"] * 3
+    # Final risk score — calibrated to avoid over-inflation
+    raw = (
+        scores_by_cat["sanctions"] * 3.0 +
+        scores_by_cat["fraud"]     * 2.5 +
+        scores_by_cat["judicial"]  * 2.0 +
+        scores_by_cat["reputation"]* 1.2 +
+        scores_by_cat["pep"]       * 0.8
+    )
+    positive_offset = scores_by_cat["positive"] * 2.5
+    score = min(100, max(0, int(raw * 1.8 - positive_offset)))
 
-    # Normalize to 0-100
-    score = min(100, max(0, int(raw_neg * 2.5 - positive_offset)))
-
-    # Determine niveau
-    if score >= 70:   niveau = "CRITIQUE"
-    elif score >= 45: niveau = "ELEVE"
-    elif score >= 20: niveau = "MODERE"
-    else:             niveau = "FAIBLE"
+    # Niveau
+    if score >= 70:    niveau = "CRITIQUE"
+    elif score >= 45:  niveau = "ELEVE"
+    elif score >= 20:  niveau = "MODERE"
+    else:              niveau = "FAIBLE"
 
     # Recommandation
-    if score >= 60 or os_result.get("found") or scores_by_cat["sanctions"] > 5:
+    if score >= 60 or os_result.get("found") or scores_by_cat["sanctions"] > 8:
         reco = "REFUSER"
-    elif score >= 25 or len(neg_dedup) >= 3:
+    elif score >= 25 or len(neg_dedup) >= 2:
         reco = "VIGILANCE_RENFORCEE"
     else:
         reco = "ACCEPTER"
 
-    # Sanctions flag
-    sanctions_trouve = os_result.get("found", False) or scores_by_cat["sanctions"] > 3
+    # Flags
+    sanctions_trouve  = os_result.get("found", False) or scores_by_cat["sanctions"] > 5
     sanctions_details = ""
     if os_result.get("found"):
         sanctions_details = f"{os_result['count']} résultat(s) OpenSanctions : " + \
-            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:2])
-    elif scores_by_cat["sanctions"] > 3:
-        all_sanc_kws = [kw for src in all_text_sources
-                        for kw in RISK_KEYWORDS["sanctions"] if kw in _text_lower(src["text"])]
-        sanctions_details = "Mots-clés détectés : " + ", ".join(set(all_sanc_kws[:5]))
+            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
+    elif scores_by_cat["sanctions"] > 5:
+        kws_found = set(kw for src in all_text_sources
+                        for kw in RISK_KEYWORDS["sanctions"]
+                        if kw in src["text"].lower())
+        sanctions_details = "Indicateurs : " + ", ".join(list(kws_found)[:5])
 
-    # Litiges flag
-    litiges_trouve = scores_by_cat["judicial"] > 4
+    litiges_trouve  = scores_by_cat["judicial"] > 4
     litiges_details = ""
     if litiges_trouve:
-        jud_kws = set()
-        for src in all_text_sources:
-            for kw in RISK_KEYWORDS["judicial"]:
-                if kw in _text_lower(src["text"]):
-                    jud_kws.add(kw)
-        litiges_details = "Indicateurs : " + ", ".join(list(jud_kws)[:6])
+        kws_j = set(kw for src in all_text_sources
+                    for kw in RISK_KEYWORDS["judicial"]
+                    if kw in src["text"].lower())
+        litiges_details = "Indicateurs : " + ", ".join(list(kws_j)[:6])
 
-    # PEP flag
-    pep_trouve = scores_by_cat["pep"] > 3
-    pep_details = "Exposition à des personnes politiquement exposées détectée." if pep_trouve else ""
+    pep_trouve  = scores_by_cat["pep"] > 3
+    pep_details = "Exposition potentielle à des personnes politiquement exposées." if pep_trouve else ""
 
-    # Reputation summary
     rep_score = scores_by_cat["reputation"]
     pos_score = scores_by_cat["positive"]
-    if rep_score > pos_score * 2:
-        rep_notations = f"Réputation dégradée (score négatif : {round(rep_score,1)}, positif : {round(pos_score,1)})"
-    elif pos_score > rep_score:
-        rep_notations = f"Réputation globalement positive (score positif : {round(pos_score,1)})"
+    if rep_score > pos_score * 1.5:
+        rep_notations = f"Réputation dégradée (négatif:{round(rep_score,1)} / positif:{round(pos_score,1)})"
+    elif pos_score > rep_score * 1.5:
+        rep_notations = f"Réputation globalement positive (positif:{round(pos_score,1)})"
     else:
         rep_notations = "Réputation neutre ou insuffisamment documentée."
 
-    # Build resume
-    nb_neg = len(neg_dedup)
-    sources_count = len([s for s in all_text_sources if s.get("domain")])
-    resume_parts = [f"Analyse basée sur {sources_count} sources web et {len(scraped_texts)} pages lues."]
-    if nb_neg:
-        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) détecté(s) (fraude, litiges, réputation).")
-    else:
-        resume_parts.append("Aucun signal négatif significatif identifié dans les sources consultées.")
-    if sanctions_trouve:
-        resume_parts.append("⚠️ Des indicateurs de sanctions ou listes de restriction ont été détectés.")
-    elif score < 20:
-        resume_parts.append("Profil de risque faible — aucune alerte majeure.")
+    nb_neg       = len(neg_dedup)
+    src_count    = len(all_text_sources)
+    total_queried = len(search_results)
 
-    # Facteurs aggravants / atténuants
+    resume_parts = [
+        f"Screening de {total_queried} résultats web ({src_count} mentionnant directement l entite)."
+    ]
+    if nb_neg:
+        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) directement associé(s) à {entity}.")
+    else:
+        resume_parts.append(f"Aucun signal négatif directement associé à {entity}.")
+    if sanctions_trouve:
+        resume_parts.append("⚠️ Indicateurs de sanctions ou restrictions détectés.")
+    elif score < 20:
+        resume_parts.append("Profil de risque faible sur les sources consultées.")
+
     aggravants = []
     attenuants = []
     if os_result.get("found"):
-        aggravants.append(f"{os_result['count']} entrée(s) dans les bases de sanctions internationales (OpenSanctions)")
+        aggravants.append(f"{os_result['count']} entrée(s) OpenSanctions confirmée(s)")
     if scores_by_cat["fraud"] > 5:
-        aggravants.append(f"Mots-clés de fraude/corruption fortement représentés (score : {round(scores_by_cat['fraud'],1)})")
+        aggravants.append(f"Mots-clés fraude/corruption associés à l entite (score:{round(scores_by_cat['fraud'],1)})")
     if scores_by_cat["judicial"] > 4:
-        aggravants.append(f"Indicateurs de procédures judiciaires détectés (score : {round(scores_by_cat['judicial'],1)})")
-    if nb_neg >= 5:
-        aggravants.append(f"{nb_neg} actualités négatives distinctes dans les résultats")
-    if scores_by_cat["pep"] > 3:
-        aggravants.append("Exposition potentielle à des PEP (personnes politiquement exposées)")
-    if pos_score > 5:
-        attenuants.append(f"Indicateurs de conformité/certification présents (score positif : {round(pos_score,1)})")
-    if nb_neg == 0:
-        attenuants.append("Aucune actualité négative directement identifiable")
-    if not os_result.get("found"):
-        attenuants.append("Absent des listes de sanctions OpenSanctions consultées")
+        aggravants.append(f"Indicateurs procédures judiciaires liées à l entite (score:{round(scores_by_cat['judicial'],1)})")
+    if nb_neg >= 3:
+        aggravants.append(f"{nb_neg} actualités négatives confirmées")
+    if pos_score > 4:
+        attenuants.append(f"Signaux positifs détectés (certification, conformité, score:{round(pos_score,1)})")
+    if nb_neg == 0 and not os_result.get("found"):
+        attenuants.append("Aucun signal négatif associé directement à l entite")
     if scores_by_cat["sanctions"] == 0:
-        attenuants.append("Aucun mot-clé de sanction détecté dans les sources")
+        attenuants.append("Absent des bases de sanctions consultées")
 
-    # Confidence: based on number of results
-    if sources_count >= 15:
-        confidence = "ELEVEE"
-    elif sources_count >= 6:
-        confidence = "MOYENNE"
-    else:
-        confidence = "FAIBLE"
+    confidence = "ELEVEE" if src_count >= 10 else ("MOYENNE" if src_count >= 4 else "FAIBLE")
 
     return {
-        "score_risque": score,
-        "niveau_risque": niveau,
-        "resume_executif": " ".join(resume_parts),
-        "negative_news": neg_dedup[:15],
-        "sanctions": {"trouve": sanctions_trouve, "details": sanctions_details},
-        "litiges_judiciaires": {"trouve": litiges_trouve, "details": litiges_details},
-        "pep_exposure": {"trouve": pep_trouve, "details": pep_details},
-        "reputation_notations": rep_notations,
-        "facteurs_aggravants": aggravants,
-        "facteurs_attenuants": attenuants,
-        "recommandation": reco,
-        "sources_consultees": list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:15],
-        "confiance_analyse": confidence,
-        "scores_categories": {k: round(v,1) for k,v in scores_by_cat.items()},
-        "moteur": "local_keywords",
+        "score_risque":          score,
+        "niveau_risque":         niveau,
+        "resume_executif":       " ".join(resume_parts),
+        "negative_news":         neg_dedup[:15],
+        "sanctions":             {"trouve": sanctions_trouve,  "details": sanctions_details},
+        "litiges_judiciaires":   {"trouve": litiges_trouve,    "details": litiges_details},
+        "pep_exposure":          {"trouve": pep_trouve,        "details": pep_details},
+        "reputation_notations":  rep_notations,
+        "facteurs_aggravants":   aggravants,
+        "facteurs_attenuants":   attenuants,
+        "recommandation":        reco,
+        "sources_consultees":    list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:20],
+        "confiance_analyse":     confidence,
+        "scores_categories":     {k: round(v, 1) for k, v in scores_by_cat.items()},
+        "nb_sources_filtrees":   src_count,
+        "nb_sources_total":      total_queried,
+        "moteur":                "local_strict_v3",
     }
 
 
@@ -1564,319 +1686,324 @@ with tab1:
 with tab2:
     st.markdown("## Screening OSINT & Due Diligence")
     st.markdown("""<div class='info-box'>
-    <b>Moteur 100% gratuit, aucune clé API requise.</b> Lance un screening complet sur Internet :
-    presse, réseaux sociaux, Trustpilot, Infogreffe, BODACC, signalements arnaques, sanctions, litiges judiciaires.
-    Génère automatiquement un rapport PDF si des risques sont détectés, ou indique RAS.
+    <b>100% gratuit — aucune clé API requise.</b>
+    Interroge 50+ sources : presse, réseaux sociaux (Twitter/LinkedIn/Facebook/Reddit),
+    Trustpilot, Infogreffe, BODACC, signal-arnaques.com, justice.fr, AMF, ACPR, OpenSanctions, Reuters, Bloomberg et plus.
+    Filtre strict : seuls les signaux directement associés à l entité sont retenus.
     </div>""", unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([3,1,1])
-    with col1:
-        entity_input = st.text_input("Entité à analyser", placeholder="Nom complet personne ou entreprise", key="entity_osint")
-    with col2:
+    c1, c2, c3 = st.columns([3,1,1])
+    with c1:
+        entity_input = st.text_input("Entité à analyser", placeholder="Ex: Jean Dupont  ou  Société XYZ SAS", key="entity_osint")
+    with c2:
         entity_type = st.selectbox("Type", ["Entreprise","Personne physique","Groupe bancaire","Autre"])
-    with col3:
+    with c3:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
         launch_btn = st.button("▶ LANCER LE SCREENING", key="btn_osint")
 
-    with st.expander("⚙️ Options avancées"):
-        c1, c2 = st.columns(2)
-        with c1:
-            linked_iban = st.text_input("IBAN lié (optionnel)", key="linked_iban")
-            add_to_watch = st.checkbox("Ajouter à la liste de surveillance après analyse")
-        with c2:
-            extra_context = st.text_area("Contexte additionnel (pays, secteur, notes...)", height=80, key="extra_ctx")
-            groq_key_tab = st.text_input("Cle Groq (optionnel, booste l analyse)", type="password",
-                                          placeholder="gsk_... — gratuit sur console.groq.com", key="groq_tab")
+    with st.expander("⚙️ Options"):
+        oa, ob = st.columns(2)
+        with oa:
+            linked_iban  = st.text_input("IBAN lié (optionnel)", key="linked_iban")
+            add_to_watch = st.checkbox("Ajouter à la surveillance après analyse")
+        with ob:
+            groq_key_tab = st.text_input("Clé Groq (optionnel — booste l analyse)", type="password",
+                                          placeholder="gsk_... gratuit sur console.groq.com", key="groq_tab")
 
-    if launch_btn and entity_input:
-        prog  = st.progress(0)
-        stat  = st.empty()
-        all_results, scraped = [], []
+    # ── Session state for PDF persistence ─────────────────────────
+    if "osint_analysis"  not in st.session_state: st.session_state["osint_analysis"]  = None
+    if "osint_entity"    not in st.session_state: st.session_state["osint_entity"]    = ""
+    if "osint_iban_data" not in st.session_state: st.session_state["osint_iban_data"] = {}
+    if "osint_bank_data" not in st.session_state: st.session_state["osint_bank_data"] = {}
+    if "osint_os_result" not in st.session_state: st.session_state["osint_os_result"] = {}
+    if "osint_has_risk"  not in st.session_state: st.session_state["osint_has_risk"]  = False
+    if "osint_results"   not in st.session_state: st.session_state["osint_results"]   = []
 
-        # ── STEP 1 — OpenSanctions (listes sanctions int.) ────────────
-        stat.markdown("🔎 **[1/6]** Listes de sanctions internationales (OpenSanctions)...")
-        os_result = check_opensanctions(entity_input)
-        prog.progress(8)
+    if launch_btn and entity_input.strip():
+        prog = st.progress(0)
+        stat = st.empty()
 
-        # ── STEP 2 — Multi-source web search ──────────────────────────
-        # 20 requetes ciblées couvrant toutes les sources demandées
-        queries = [
-            # Presse et médias
-            f'"{entity_input}" fraude arnaque escroquerie',
-            f'"{entity_input}" condamne tribunal jugement peine',
-            f'"{entity_input}" sanctions AMF ACPR Banque de France',
-            f'"{entity_input}" liquidation judiciaire redressement faillite',
-            f'"{entity_input}" blanchiment corruption pot-de-vin',
-            f'"{entity_input}" mise en examen perquisition',
-            f'"{entity_input}" fraud corruption scandal',
-            # Réseaux sociaux
-            f'site:twitter.com "{entity_input}" arnaque fraude',
-            f'site:linkedin.com "{entity_input}"',
-            f'site:facebook.com "{entity_input}" arnaque',
-            # Avis et notations
-            f'site:trustpilot.com "{entity_input}"',
-            f'site:avis-verifies.com "{entity_input}"',
-            f'"{entity_input}" avis client plainte signalement',
-            # Registres légaux et judiciaires
-            f'site:infogreffe.fr "{entity_input}"',
-            f'site:bodacc.fr "{entity_input}"',
-            f'site:tribunal-commerce.fr "{entity_input}"',
-            f'"{entity_input}" site:justice.fr',
-            # Signalements arnaques
-            f'"{entity_input}" site:signal-arnaques.com',
-            f'"{entity_input}" site:cybermalveillance.gouv.fr',
-            f'"{entity_input}" escroquerie signale arnaqueur victime',
-        ]
+        # STEP 1 — OpenSanctions
+        stat.markdown("🔎 **[1/5]** Listes sanctions internationales (OpenSanctions)...")
+        os_result = check_opensanctions(entity_input.strip())
+        prog.progress(5)
 
-        stat.markdown(f"🌐 **[2/6]** Recherche web — {len(queries)} requêtes (presse, réseaux, justice, avis, arnaques)...")
+        # STEP 2 — Build & run 50+ queries
+        queries = build_search_queries(entity_input.strip())
+        all_results = []
+        stat.markdown(f"🌐 **[2/5]** Interrogation de 50+ sources ({len(queries)} requêtes)...")
         for i, q in enumerate(queries):
-            r = search_web(q, num=6)
-            all_results.extend(r)
-            prog.progress(8 + int((i+1)/len(queries)*35))
-            time.sleep(0.1)
+            hits = search_web(q, num=5)
+            all_results.extend(hits)
+            prog.progress(5 + int((i + 1) / len(queries) * 45))
+            time.sleep(0.08)
 
         # Deduplicate by URL
-        seen_urls = set()
-        unique_results = []
+        seen_urls, unique = set(), []
         for r in all_results:
             u = r.get("url","")
             if u and u not in seen_urls:
                 seen_urls.add(u)
-                unique_results.append(r)
-        all_results = unique_results
+                unique.append(r)
+        all_results = unique
 
-        # ── STEP 3 — Deep scraping of top results ────────────────────
-        stat.markdown("📄 **[3/6]** Lecture approfondie des pages (presse, Trustpilot, Infogreffe, BODACC)...")
-        priority_domains = ["trustpilot","infogreffe","bodacc","signal-arnaques","cybermalveillance",
-                            "lemonde","lefigaro","bfmtv","liberation","latribune","lesechos",
-                            "amf-france","acpr","justice.fr","tribunal"]
-        seen_domains = set()
-        # Prioritize important domains first
-        sorted_results = sorted(all_results,
-            key=lambda r: 1 if any(d in r.get("url","") for d in priority_domains) else 0,
+        # STEP 3 — Deep scraping (priority: legal/press/review domains)
+        stat.markdown("📄 **[3/5]** Lecture approfondie des pages pertinentes...")
+        priority = ["trustpilot","infogreffe","bodacc","signal-arnaques","cybermalveillance",
+                    "pappers","societe.com","verif.com","amf-france","acpr","justice.fr",
+                    "lemonde","lefigaro","bfmtv","lesechos","latribune","reuters","bloomberg"]
+        sorted_r = sorted(all_results,
+            key=lambda r: 2 if any(p in r.get("url","") for p in priority) else 0,
             reverse=True)
-        for r in sorted_results[:25]:
+        scraped, seen_dom = [], set()
+        for r in sorted_r[:40]:
             dom = urlparse(r.get("url","")).netloc.replace("www.","")
-            if dom and dom not in seen_domains and len(scraped) < 10:
-                seen_domains.add(dom)
-                txt = scrape_page(r["url"], max_chars=2500)
-                if txt and len(txt) > 100:
+            if dom and dom not in seen_dom and len(scraped) < 12:
+                seen_dom.add(dom)
+                txt = scrape_page(r["url"], max_chars=2000)
+                if txt and len(txt) > 80:
                     scraped.append(txt)
-        prog.progress(60)
+        prog.progress(62)
 
-        # ── STEP 4 — IBAN lookup ───────────────────────────────────────
+        # STEP 4 — IBAN
         iban_data, bank_data = {}, {}
-        if linked_iban:
-            iban_data = validate_iban(linked_iban)
+        if linked_iban.strip():
+            iban_data = validate_iban(linked_iban.strip())
             if iban_data.get("bank_code"):
                 b = db_get_bank_by_code(iban_data["bank_code"])
-                if b:
-                    bank_data = b
+                if b: bank_data = b
 
-        # ── STEP 5 — Local analysis engine ───────────────────────────
-        stat.markdown("🔍 **[4/6]** Analyse des signaux de risque (moteur local)...")
-        analysis = analyze_local(entity_input, all_results, scraped, os_result)
+        # STEP 5 — Analysis
+        stat.markdown("🔍 **[4/5]** Analyse des signaux (filtre strict entité)...")
+        analysis = analyze_local(entity_input.strip(), all_results, scraped, os_result)
 
-        # Optional: boost with Groq LLM if key provided
-        groq_k = groq_key_tab or (api_key if api_key else None)
-        if groq_k and analysis.get("confiance_analyse") == "FAIBLE":
-            stat.markdown("⚡ **[5/6]** Analyse enrichie avec LLM (Groq)...")
+        # Optional Groq boost
+        gk = groq_key_tab.strip() or (api_key.strip() if api_key else "")
+        if gk:
+            stat.markdown("⚡ **[5/5]** Enrichissement LLM (Groq)...")
             try:
-                groq_result = analyze_with_groq(entity_input, all_results, scraped, groq_k)
-                if groq_result:
-                    # Merge: keep highest score
-                    if groq_result.get("score_risque",0) > analysis.get("score_risque",0):
-                        groq_result["scores_categories"] = analysis.get("scores_categories",{})
-                        groq_result["_moteur_label"] = "⚡ Groq llama-3.1 + moteur local"
-                        analysis = groq_result
-            except:
-                pass
-        prog.progress(85)
+                gr = analyze_with_groq(entity_input.strip(), all_results[:30], scraped[:4], gk)
+                if gr and gr.get("score_risque",0) >= analysis.get("score_risque",0):
+                    gr["scores_categories"] = analysis.get("scores_categories",{})
+                    gr["nb_sources_filtrees"] = analysis.get("nb_sources_filtrees",0)
+                    gr["nb_sources_total"]    = analysis.get("nb_sources_total",0)
+                    gr["_moteur_label"] = "⚡ Groq llama-3.1 + filtrage strict"
+                    analysis = gr
+            except: pass
+        prog.progress(90)
 
-        # ── STEP 6 — Save & display ──────────────────────────────────
-        stat.markdown("💾 **[6/6]** Enregistrement et génération du rapport...")
-        db_save_report(entity_input, entity_type,
+        # Save
+        stat.markdown("💾 **[5/5]** Enregistrement...")
+        db_save_report(entity_input.strip(), entity_type,
                        linked_iban or "",
                        analysis.get("score_risque",0),
                        analysis.get("niveau_risque",""),
                        analysis.get("recommandation",""),
                        analysis.get("resume_executif",""),
                        json.dumps(analysis, ensure_ascii=False))
-
         if add_to_watch:
-            db_add_watchlist(entity_input, entity_type,
-                             "Screening OSINT automatique",
-                             analysis.get("niveau_risque",""),
-                             "Auto")
+            db_add_watchlist(entity_input.strip(), entity_type,
+                             "Screening auto", analysis.get("niveau_risque",""), "Auto")
+
+        # Persist in session
+        score  = analysis.get("score_risque", 0)
+        niveau = analysis.get("niveau_risque","FAIBLE")
+        neg_n  = analysis.get("negative_news",[])
+        has_risk = (
+            score >= 20
+            or os_result.get("found")
+            or analysis.get("sanctions",{}).get("trouve")
+            or analysis.get("litiges_judiciaires",{}).get("trouve")
+            or len(neg_n) >= 2
+            or niveau in ("ELEVE","CRITIQUE")
+        )
+        st.session_state["osint_analysis"]  = analysis
+        st.session_state["osint_entity"]    = entity_input.strip()
+        st.session_state["osint_iban_data"] = iban_data
+        st.session_state["osint_bank_data"] = bank_data
+        st.session_state["osint_os_result"] = os_result
+        st.session_state["osint_has_risk"]  = has_risk
+        st.session_state["osint_results"]   = all_results
 
         prog.progress(100)
         stat.empty()
 
-        # ── DISPLAY ─────────────────────────────────────────────────
+    # ── DISPLAY (from session state, persists after button click) ──
+    analysis  = st.session_state.get("osint_analysis")
+    entity_d  = st.session_state.get("osint_entity","")
+    iban_data = st.session_state.get("osint_iban_data",{})
+    bank_data = st.session_state.get("osint_bank_data",{})
+    os_result = st.session_state.get("osint_os_result",{})
+    has_risk  = st.session_state.get("osint_has_risk", False)
+    all_results = st.session_state.get("osint_results",[])
+
+    if analysis:
         st.markdown("---")
-
-        score   = analysis.get("score_risque", 0)
-        niveau  = analysis.get("niveau_risque", "FAIBLE")
-        reco    = analysis.get("recommandation", "ACCEPTER")
-        neg_news = analysis.get("negative_news", [])
-        sanctions_found = analysis.get("sanctions",{}).get("trouve", False)
-        litiges_found   = analysis.get("litiges_judiciaires",{}).get("trouve", False)
-        has_risk = (score >= 20 or sanctions_found or litiges_found or len(neg_news) >= 2
-                    or os_result.get("found") or niveau in ("ELEVE","CRITIQUE"))
-
-        moteur_lbl = analysis.get("_moteur_label","🔍 Moteur local")
-        scores_cat = analysis.get("scores_categories",{})
-        cat_str = "  ·  ".join(f"{k}: {v}" for k,v in scores_cat.items() if v > 0)
+        score   = analysis.get("score_risque",0)
+        niveau  = analysis.get("niveau_risque","FAIBLE")
+        reco    = analysis.get("recommandation","ACCEPTER")
+        neg_n   = analysis.get("negative_news",[])
+        nb_filt = analysis.get("nb_sources_filtrees",0)
+        nb_tot  = analysis.get("nb_sources_total", len(all_results))
+        moteur  = analysis.get("_moteur_label", analysis.get("moteur","🔍 local strict v3"))
+        sc_cat  = analysis.get("scores_categories",{})
+        cat_str = "  ·  ".join(f"{k}:{v}" for k,v in sc_cat.items() if v > 0)
 
         st.markdown(f"""<div style='background:rgba(0,212,255,0.04);border:1px solid #1e2535;
-        border-radius:4px;padding:8px 14px;margin:4px 0 10px;font-size:0.75rem;'>
+        border-radius:4px;padding:7px 14px;margin:4px 0 10px;font-size:0.73rem;'>
         <span style='color:#5a6a7a;'>Moteur :</span>
-        <span style='color:#00d4ff;font-family:IBM Plex Mono,monospace;'>{moteur_lbl}</span>
-        {"  <span style='color:#5a6a7a;'>|  Signaux : "+cat_str+"</span>" if cat_str else ""}
-        &nbsp;·&nbsp;<span style='color:#5a6a7a;'>{len(all_results)} sources · {len(scraped)} pages lues</span>
+        <b style='color:#00d4ff;font-family:IBM Plex Mono,monospace;'>{moteur}</b>
+        &nbsp;·&nbsp;<span style='color:#5a6a7a;'>{nb_tot} résultats bruts
+        → <b style='color:#c8d6e5;'>{nb_filt} mentionnant directement {entity_d}</b></span>
+        {"  ·  <span style='color:#5a6a7a;'>Signaux : "+cat_str+"</span>" if cat_str else ""}
         </div>""", unsafe_allow_html=True)
 
-        # ── RAS OR RISK ───────────────────────────────────────────────
+        # ── RAS ────────────────────────────────────────────────────
         if not has_risk:
             st.markdown(f"""
             <div style='background:rgba(0,255,136,0.07);border:2px solid #00ff88;border-radius:8px;
-            padding:24px 28px;margin:12px 0;text-align:center;'>
-              <div style='font-size:2rem;'>✅</div>
-              <div style='font-family:IBM Plex Mono,monospace;font-size:1.2rem;color:#00ff88;margin:8px 0;'>
+            padding:28px;margin:12px 0;text-align:center;'>
+              <div style='font-size:2.5rem;'>✅</div>
+              <div style='font-family:IBM Plex Mono,monospace;font-size:1.3rem;color:#00ff88;margin:10px 0;'>
                 RAS — AUCUN RISQUE DÉTECTÉ
               </div>
-              <div style='color:#c8d6e5;font-size:0.9rem;'>{entity_input}</div>
-              <div style='color:#5a6a7a;font-size:0.8rem;margin-top:8px;'>
-                Score : {score}/100 · {len(all_results)} sources analysées · Aucun signal négatif significatif
+              <div style='color:#c8d6e5;font-size:0.95rem;'><b>{entity_d}</b></div>
+              <div style='color:#5a6a7a;font-size:0.8rem;margin-top:10px;'>
+                Score : {score}/100 · {nb_tot} sources interrogées · {nb_filt} mentions directes · Aucun signal négatif confirmé
               </div>
             </div>""", unsafe_allow_html=True)
             st.markdown(f"<div class='ok-box'>{analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
 
+        # ── RISK DETECTED ─────────────────────────────────────────
         else:
-            # Risk detected — show full dashboard
-            badge_map = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}
-            bmap = badge_map.get(niveau,"badge-medium")
-            rc_col = {"ACCEPTER":"#00ff88","VIGILANCE_RENFORCEE":"#ffcc00","REFUSER":"#ff3366"}.get(reco,"#5a6a7a")
-            sc_col = "#ff3366" if os_result.get("found") or sanctions_found else "#00ff88"
+            bmap  = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}.get(niveau,"badge-medium")
+            rc_c  = {"ACCEPTER":"#00ff88","VIGILANCE_RENFORCEE":"#ffcc00","REFUSER":"#ff3366"}.get(reco,"#5a6a7a")
+            sc_c  = "#ff3366" if os_result.get("found") or analysis.get("sanctions",{}).get("trouve") else "#00ff88"
 
-            c1,c2,c3,c4 = st.columns(4)
-            with c1:
-                st.markdown(f"<div class='metric-card'><div class='label'>Score risque</div><div class='value'>{score}<span style='font-size:0.8rem;color:#5a6a7a;'>/100</span></div></div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"<div class='metric-card'><div class='label'>Niveau</div><div class='value' style='font-size:1rem;margin-top:8px;'><span class='{bmap}'>{niveau}</span></div></div>", unsafe_allow_html=True)
-            with c3:
-                sc_txt = f"SANCTIONS : {os_result.get('count',0)} hit(s)" if os_result.get("found") else ("⚠ Mots-clés" if sanctions_found else "✅ Aucune sanction")
-                st.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:0.8rem;color:{sc_col};'>{sc_txt}</div></div>", unsafe_allow_html=True)
-            with c4:
-                st.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.75rem;color:{rc_col};'>{reco}</div></div>", unsafe_allow_html=True)
+            mc1,mc2,mc3,mc4 = st.columns(4)
+            with mc1:
+                st.markdown(f"<div class='metric-card'><div class='label'>Score</div><div class='value'>{score}<span style='font-size:0.8rem;color:#5a6a7a;'>/100</span></div></div>", unsafe_allow_html=True)
+            with mc2:
+                st.markdown(f"<div class='metric-card'><div class='label'>Niveau</div><div class='value' style='font-size:0.95rem;margin-top:8px;'><span class='{bmap}'>{niveau}</span></div></div>", unsafe_allow_html=True)
+            with mc3:
+                sc_t = f"🔴 {os_result.get('count',0)} hit(s) OS" if os_result.get("found") else ("⚠ Indicateurs" if analysis.get("sanctions",{}).get("trouve") else "✅ Aucune sanction")
+                st.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:0.8rem;color:{sc_c};'>{sc_t}</div></div>", unsafe_allow_html=True)
+            with mc4:
+                st.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.72rem;color:{rc_c};'>{reco}</div></div>", unsafe_allow_html=True)
 
             st.markdown(f"<div class='warn-box'><b>⚠ Résumé :</b> {analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
 
-            cl, cr = st.columns(2)
-            with cl:
-                st.markdown("#### 📰 Signaux négatifs détectés")
-                if neg_news:
-                    for n in neg_news[:8]:
-                        g = n.get("gravite","").lower()
+            dl, dr = st.columns(2)
+            with dl:
+                st.markdown("#### 📰 Signaux négatifs (entité confirmée)")
+                if neg_n:
+                    for n in neg_n[:8]:
+                        g   = n.get("gravite","").lower()
                         cls = {"faible":"info-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"warn-box")
                         url = n.get("url","")
-                        link = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.75rem;'>→ Source</a>" if url else ""
+                        lnk = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.72rem;'>→ lire</a>" if url else ""
                         kws = ", ".join(n.get("mots_cles",[])[:3])
                         st.markdown(f"""<div class='{cls}'>
-                        <b>{n.get('titre','')[:90]}</b>{link}<br>
-                        <small>{n.get('source','')} · {n.get('nature','')} · <span style='color:#ffcc00;'>mots-clés: {kws}</span></small>
+                        <b>{n.get('titre','')[:90]}</b>{lnk}<br>
+                        <small>{n.get('source','')} · {n.get('nature','')} · <span style='color:#ffcc00;'>{kws}</span></small>
                         </div>""", unsafe_allow_html=True)
                 else:
-                    st.markdown("<div class='info-box'>Titres sans signal fort mais score > seuil.</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='info-box'>Signaux faibles — vérification humaine recommandée.</div>", unsafe_allow_html=True)
 
-                st.markdown("#### ⚖️ Litiges & procédures judiciaires")
                 lit = analysis.get("litiges_judiciaires",{})
+                st.markdown("#### ⚖️ Litiges")
                 if lit.get("trouve"):
                     st.markdown(f"<div class='danger-box'>⚠️ {lit.get('details','')}</div>", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='ok-box'>Aucun litige identifié</div>", unsafe_allow_html=True)
 
-            with cr:
-                st.markdown("#### 🚨 Sanctions & listes internationales")
+            with dr:
+                st.markdown("#### 🚨 Sanctions")
                 if os_result.get("found"):
-                    st.markdown(f"<div class='danger-box'>🔴 <b>{os_result['count']}</b> entrée(s) OpenSanctions</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='danger-box'>🔴 {os_result['count']} entrée(s) OpenSanctions</div>", unsafe_allow_html=True)
                     for r in os_result.get("results",[])[:3]:
                         st.markdown(f"<div class='result-row'><b>{r.get('caption','')}</b> · {', '.join(r.get('datasets',[]))}</div>", unsafe_allow_html=True)
-                elif sanctions_found:
-                    st.markdown(f"<div class='warn-box'>⚠️ {analysis.get('sanctions',{}).get('details','')}</div>", unsafe_allow_html=True)
+                elif analysis.get("sanctions",{}).get("trouve"):
+                    st.markdown(f"<div class='warn-box'>⚠️ {analysis['sanctions']['details']}</div>", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='ok-box'>Absent des listes de sanctions</div>", unsafe_allow_html=True)
 
-                st.markdown("#### 👤 PEP & Réputation")
                 pep = analysis.get("pep_exposure",{})
+                st.markdown("#### 👤 PEP & Réputation")
                 if pep.get("trouve"):
-                    st.markdown(f"<div class='warn-box'>⚠️ {pep.get('details','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='warn-box'>{pep.get('details','')}</div>", unsafe_allow_html=True)
                 rep = analysis.get("reputation_notations","")
                 if rep:
-                    cls = "warn-box" if "dégradée" in rep else "info-box"
-                    st.markdown(f"<div class='{cls}'>⭐ {rep}</div>", unsafe_allow_html=True)
+                    c = "warn-box" if "dégradée" in rep else "ok-box"
+                    st.markdown(f"<div class='{c}'>⭐ {rep}</div>", unsafe_allow_html=True)
 
-            cf1, cf2 = st.columns(2)
-            with cf1:
-                st.markdown("#### 🔺 Facteurs aggravants")
+            fa1, fa2 = st.columns(2)
+            with fa1:
                 for f in analysis.get("facteurs_aggravants",[]):
-                    st.markdown(f"<div class='danger-box'>• {f}</div>", unsafe_allow_html=True)
-            with cf2:
-                st.markdown("#### 🔻 Facteurs atténuants")
+                    st.markdown(f"<div class='danger-box'>🔺 {f}</div>", unsafe_allow_html=True)
+            with fa2:
                 for f in analysis.get("facteurs_attenuants",[]):
-                    st.markdown(f"<div class='ok-box'>• {f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='ok-box'>🔻 {f}</div>", unsafe_allow_html=True)
 
-            # All raw results
-            with st.expander(f"📋 Sources brutes ({len(all_results)} résultats)"):
-                for r in all_results[:40]:
-                    dom = urlparse(r.get("url","")).netloc
-                    is_risk = any(kw in (r.get("title","")+r.get("snippet","")).lower()
-                                  for kw in ["fraude","arnaque","condamn","sanction","escroquerie","fraud","scam"])
-                    border = "border-left:3px solid #ff3366;" if is_risk else ""
-                    st.markdown(f"""<div class='result-row' style='{border}'>
+            with st.expander(f"📋 Sources brutes ({len(all_results)} résultats · {nb_filt} filtrés)"):
+                for r in all_results[:50]:
+                    dom  = urlparse(r.get("url","")).netloc
+                    txt  = (r.get("title","") + " " + r.get("snippet","")).lower()
+                    risk_kw = any(kw in txt for cat in ["fraud","sanctions","judicial"]
+                                  for kw in RISK_KEYWORDS.get(cat,{}).keys())
+                    bdr = "border-left:3px solid #ff3366;" if risk_kw else ""
+                    st.markdown(f"""<div class='result-row' style='{bdr}'>
                     <a href='{r.get("url","")}' target='_blank' style='color:#00d4ff;text-decoration:none;'><b>{r.get("title","")[:100]}</b></a><br>
-                    <small style='color:#5a6a7a;'>{dom}</small>&nbsp;
-                    <small>{r.get("snippet","")[:140]}</small>
+                    <small style='color:#5a6a7a;'>{dom}</small>
+                    <small> · {r.get("snippet","")[:130]}</small>
                     </div>""", unsafe_allow_html=True)
 
-        # ── PDF EXPORT ───────────────────────────────────────────────
+        # ── PDF SECTION — always visible after analysis ──────────
         st.markdown("---")
         if has_risk:
             st.markdown("""<div class='warn-box'>
-            ⚠️ Des signaux ont été détectés. Générez le rapport PDF pour une analyse complète.
+            ⚠️ Des signaux ont été détectés — générez le rapport PDF pour documentation et analyse humaine.
             </div>""", unsafe_allow_html=True)
-            col_pdf1, col_pdf2 = st.columns([2,1])
-            with col_pdf1:
-                if st.button("⬇ GÉNÉRER RAPPORT PDF", key="gen_pdf"):
-                    with st.spinner("Génération du rapport PDF..."):
-                        try:
-                            pdf = generate_pdf_report(entity_input, iban_data, bank_data, os_result, analysis)
-                            fname = f"FinShield_{entity_input.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                            st.download_button("📥 Télécharger le rapport", data=pdf,
-                                               file_name=fname, mime="application/pdf", key="dl_pdf")
-                            st.markdown("<div class='ok-box'>✅ Rapport PDF prêt au téléchargement.</div>", unsafe_allow_html=True)
-                        except Exception as e:
-                            st.error(f"Erreur PDF : {e}")
-            with col_pdf2:
-                st.markdown(f"""<div class='metric-card'>
-                <div class='label'>Contenu du rapport</div>
-                <div class='sub' style='margin-top:6px;'>
-                Score · Niveau · Sanctions<br>
-                {len(neg_news)} actualité(s) négative(s)<br>
-                Litiges · PEP · Réputation<br>
-                Facteurs aggravants/atténuants<br>
-                IBAN + banque (si renseigné)
-                </div></div>""", unsafe_allow_html=True)
-        else:
-            st.markdown("<div class='ok-box'>✅ Aucun risque détecté — rapport PDF non nécessaire.</div>", unsafe_allow_html=True)
-            if st.button("⬇ Générer quand même un rapport PDF vierge", key="gen_pdf_ras"):
-                with st.spinner("Génération..."):
+
+        pdf_col1, pdf_col2 = st.columns([1,2])
+        with pdf_col1:
+            btn_label = "⬇ GÉNÉRER RAPPORT PDF" if has_risk else "⬇ Générer rapport RAS (PDF)"
+            if st.button(btn_label, key="gen_pdf_main"):
+                with st.spinner("Génération du rapport PDF en cours..."):
                     try:
-                        pdf = generate_pdf_report(entity_input, iban_data, bank_data, os_result, analysis)
-                        fname = f"FinShield_RAS_{entity_input.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                        st.download_button("📥 Télécharger", data=pdf, file_name=fname, mime="application/pdf", key="dl_pdf_ras")
+                        pdf_bytes = generate_pdf_report(
+                            entity_d,
+                            iban_data,
+                            bank_data,
+                            os_result,
+                            analysis
+                        )
+                        fname = f"FinShield_{entity_d.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                        st.download_button(
+                            label="📥 Télécharger le rapport PDF",
+                            data=pdf_bytes,
+                            file_name=fname,
+                            mime="application/pdf",
+                            key="dl_pdf_main"
+                        )
+                        if has_risk:
+                            st.markdown("<div class='ok-box'>✅ Rapport PDF généré — téléchargez ci-dessus.</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown("<div class='ok-box'>✅ Rapport RAS généré.</div>", unsafe_allow_html=True)
                     except Exception as e:
-                        st.error(f"Erreur PDF : {e}")
+                        st.error(f"Erreur génération PDF : {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+
+        with pdf_col2:
+            st.markdown(f"""<div class='metric-card'>
+            <div class='label'>Contenu du rapport PDF</div>
+            <div class='sub' style='margin-top:6px;line-height:1.8;'>
+            Score {score}/100 · Niveau {niveau} · Recommandation : {reco}<br>
+            {len(neg_n)} signal(aux) négatif(s) · Sanctions : {"Oui" if os_result.get("found") else "Non"}<br>
+            {nb_tot} sources interrogées · {nb_filt} mentions confirmées<br>
+            IBAN + banque {"✓" if iban_data.get("raw") else "—"} · Facteurs de risque détaillés
+            </div></div>""", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════
