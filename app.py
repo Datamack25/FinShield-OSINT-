@@ -1152,8 +1152,8 @@ def analyze_local(entity: str, search_results_with_cat: list, scraped_texts: lis
 
         # At FL=0: every result from a negative query IS an alert
         # At FL>=1: only if entity is mentioned in title/snippet
-        if filter_level >= 4 and not ent_found:
-            continue
+        #if filter_level >= 4 and not ent_found:
+            #continue
 
         # Get category info from the query that produced this result
         cat_info = QUERY_CAT_INFO.get(query_cat, DEFAULT_CAT_INFO)
@@ -1249,7 +1249,7 @@ def analyze_local(entity: str, search_results_with_cat: list, scraped_texts: lis
             "VIGILANCE_RENFORCEE"  if score >= 5  or len(neg_dedup) >= 1 else
             "ACCEPTER")
 
-    nb_neg    = len(neg_dedup) => 2
+    nb_neg    = len(neg_dedup) 
     nb_entity = sum(1 for n in neg_dedup if n.get("entity_found"))
     nb_total  = len(all_articles)
     src_count = len(neg_dedup)
