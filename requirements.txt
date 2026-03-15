@@ -1,15 +1,26 @@
+# ── Core ──────────────────────────────────────────────────────────
 streamlit>=1.32
 requests>=2.31
 beautifulsoup4>=4.12
 pandas>=2.0
+lxml>=4.9
 
-# PDF generation & manipulation
+# ── PDF generation & manipulation ────────────────────────────────
 reportlab>=4.1
 pypdf>=4.0
 pdfplumber>=0.10
 Pillow>=10.0
 
-# NO API KEY REQUIRED — moteur d'analyse local intégré
-# Options LLM gratuites (optionnelles) :
-# - Groq : clé gratuite sur console.groq.com (14 400 req/jour)
-# - Ollama : installer sur ollama.com puis : ollama pull llama3.2
+# ── NO API KEY REQUIRED ──────────────────────────────────────────
+# Moteur d'analyse local 100% gratuit (mots-clés pondérés + scoring)
+# Sources interrogées : DuckDuckGo, Bing, OpenSanctions,
+#   Trustpilot, Infogreffe, BODACC, signal-arnaques.com,
+#   cybermalveillance.gouv.fr, Twitter, LinkedIn, Facebook,
+#   AMF, ACPR, justice.fr, tribunal-commerce.fr
+#
+# Options LLM gratuites (optionnelles, pour enrichir l'analyse) :
+#   Option A — Groq (cloud, 14 400 req/jour gratuits)
+#              Clé sur https://console.groq.com  →  préfixe gsk_...
+#   Option B — Ollama (100% local, aucune donnée envoyée)
+#              https://ollama.com  →  ollama pull llama3.2
+#              L'app détecte automatiquement Ollama sur localhost:11434
