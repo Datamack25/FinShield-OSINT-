@@ -1041,46 +1041,65 @@ SOURCE_CREDIBILITY = {
 
 def _text_lower(s): return s.lower() if s else ""
 
-def analyze_local(entity: str, search_results: list, scraped_texts: list, os_result: dict) -> dict:
+def analyze_local(entity: str, search_results: list, scraped_texts: list,
+                  os_result: dict, filter_level: int = 0) -> dict:
     """
     Moteur d analyse risque 100% local.
-    FILTRE STRICT : un signal n est compté QUE si le nom de l entite
-    apparait dans la meme fenetre de texte que le mot-cle risque.
-    Evite les faux positifs sur des articles generiques.
+
+    filter_level 0..10 :
+      0  = aucun filtre (tout est comptabilisé, max faux positifs)
+      1-3 = filtre léger : entité présente dans la source
+      4-6 = filtre modéré : entité dans ±400 chars autour du mot-clé
+      7-9 = filtre strict  : entité dans ±180 chars autour du mot-clé
+      10  = filtre extrême : entité dans ±60 chars + token exact requis
     """
-    # Prepare entity tokens for matching (full name + each word >= 4 chars)
+    # ── Paramètres selon filter_level ──────────────────────────────
+    # Source-level pre-filter : exiger que l entite soit dans le texte ?
+    require_entity_in_source = (filter_level >= 1)
+    # Proximity window (chars autour du mot-clé) : None = désactivé
+    if filter_level == 0:
+        proximity_window = None       # pas de filtre proximité
+    elif filter_level <= 3:
+        proximity_window = None       # filtre source seulement
+    elif filter_level <= 6:
+        proximity_window = 400
+    elif filter_level <= 9:
+        proximity_window = 180
+    else:
+        proximity_window = 60
+    # Score minimum pour qu un article soit retenu comme negative_news
+    min_neg_score = max(0.5, filter_level * 0.3)
+
+    # ── Tokens entité ───────────────────────────────────────────────
     entity_low   = entity.lower().strip()
-    entity_words = [w for w in entity_low.split() if len(w) >= 4]
-    # Also short versions: first word, last word
+    entity_words = [w for w in entity_low.split() if len(w) >= 3]
     entity_tokens = list(set([entity_low] + entity_words))
     if len(entity_words) >= 2:
-        entity_tokens.append(entity_words[0])   # first name / first word
-        entity_tokens.append(entity_words[-1])  # last name / last word
+        entity_tokens.append(entity_words[0])
+        entity_tokens.append(entity_words[-1])
 
-    def entity_present(txt: str, window: int = 200) -> bool:
-        """Return True if any entity token appears in txt."""
+    def entity_present(txt: str) -> bool:
         t = txt.lower()
         return any(tok in t for tok in entity_tokens)
 
-    def entity_near_kw(txt: str, kw_idx: int, window: int = 180) -> bool:
-        """Return True if entity token appears within `window` chars of keyword position."""
-        t = txt.lower()
-        ctx = t[max(0, kw_idx - window): kw_idx + window + len(entity_low)]
+    def entity_near_kw(txt_low: str, kw_idx: int) -> bool:
+        if proximity_window is None:
+            return True   # filtre proximité désactivé
+        ctx = txt_low[max(0, kw_idx - proximity_window): kw_idx + proximity_window + len(entity_low)]
         return any(tok in ctx for tok in entity_tokens)
 
     scores_by_cat = {k: 0.0 for k in RISK_KEYWORDS}
     negative_news = []
     all_text_sources = []
 
-    # Build source list — only include sources where entity name appears somewhere
+    # ── Construire la liste de sources ─────────────────────────────
     for r in search_results:
         combined = f"{r.get('title','')} {r.get('snippet','')}".strip()
         if not combined:
             continue
         domain = urlparse(r.get("url","")).netloc.replace("www.","")
         cred   = SOURCE_CREDIBILITY.get(domain, 1.0)
-        # Pre-filter: skip sources with zero mention of entity
-        if not entity_present(combined, window=500):
+        if require_entity_in_source and not entity_present(combined):
             continue
         all_text_sources.append({
             "text": combined, "title": r.get("title",""),
@@ -1089,14 +1108,16 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list, os_res
         })
 
     for t in scraped_texts:
-        if not t or not entity_present(t, window=1000):
+        if not t:
+            continue
+        if require_entity_in_source and not entity_present(t):
             continue
         all_text_sources.append({
             "text": t, "title": "", "url": "", "domain": "", "cred": 1.0,
             "is_scrape": True
         })
 
-    # Score each entity-confirmed source
+    # ── Scoring ─────────────────────────────────────────────────────
     for src in all_text_sources:
         txt_low = src["text"].lower()
         for cat, kws in RISK_KEYWORDS.items():
@@ -1104,18 +1125,17 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list, os_res
             for kw, weight in kws.items():
                 idx = txt_low.find(kw)
                 while idx != -1:
-                    # STRICT: entity must be within ±180 chars of keyword
-                    if entity_near_kw(txt_low, idx, window=180):
+                    if entity_near_kw(txt_low, idx):
                         effective = weight * src["cred"]
                         cat_hits.append((kw, round(effective, 1)))
                         scores_by_cat[cat] += effective
-                        break  # count keyword once per source
+                        break
                     idx = txt_low.find(kw, idx + 1)
 
             # Build negative news entry
             if cat != "positive" and cat_hits and src.get("title"):
                 neg_score = sum(w for _, w in cat_hits)
-                if neg_score >= 2.5:
+                if neg_score >= min_neg_score:
                     nature_map = {
                         "sanctions": "Sanction / Liste noire",
                         "fraud":     "Fraude / Corruption",
@@ -1709,6 +1729,21 @@ with tab2:
         with ob:
             groq_key_tab = st.text_input("Clé Groq (optionnel — booste l analyse)", type="password",
                                           placeholder="gsk_... gratuit sur console.groq.com", key="groq_tab")
+            st.markdown("""<div style='font-size:0.75rem;color:#5a6a7a;margin-top:12px;margin-bottom:4px;'>
+            <b style='color:#c8d6e5;'>🎚️ Niveau de filtrage des résultats</b><br>
+            <span style='color:#00ff88;'>0</span> = tout remonter (faux positifs possibles) &nbsp;·&nbsp;
+            <span style='color:#ffcc00;'>5</span> = équilibré &nbsp;·&nbsp;
+            <span style='color:#ff3366;'>10</span> = extrême (entité dans ±60 chars du mot-clé)
+            </div>""", unsafe_allow_html=True)
+            filter_level = st.slider("Filtrage", min_value=0, max_value=10, value=3,
+                                      key="filter_slider",
+                                      help="0 = aucun filtre · 3 = légèrement filtré (défaut) · 7 = strict · 10 = extrême")
+            filter_labels = {0:"Aucun filtre",1:"Très léger",2:"Léger",3:"Léger+",
+                             4:"Modéré",5:"Modéré+",6:"Modéré++",
+                             7:"Strict",8:"Strict+",9:"Très strict",10:"Extrême"}
+            fl_color = "#00ff88" if filter_level <= 2 else ("#ffcc00" if filter_level <= 6 else "#ff3366")
+            st.markdown(f"<div style='font-size:0.75rem;color:{fl_color};font-family:IBM Plex Mono,monospace;'>"
+                        f"Niveau {filter_level} — {filter_labels[filter_level]}</div>", unsafe_allow_html=True)
 
     # ── Session state for PDF persistence ─────────────────────────
     if "osint_analysis"  not in st.session_state: st.session_state["osint_analysis"]  = None
@@ -1775,7 +1810,8 @@ with tab2:
 
         # STEP 5 — Analysis
         stat.markdown("🔍 **[4/5]** Analyse des signaux (filtre strict entité)...")
-        analysis = analyze_local(entity_input.strip(), all_results, scraped, os_result)
+        fl = st.session_state.get('filter_slider', 3)
+        analysis = analyze_local(entity_input.strip(), all_results, scraped, os_result, filter_level=fl)
 
         # Optional Groq boost
         gk = groq_key_tab.strip() or (api_key.strip() if api_key else "")
