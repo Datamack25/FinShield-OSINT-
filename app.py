@@ -153,71 +153,410 @@ def init_db():
     conn.close()
 
 def seed_banks():
-    """Seed the banks table with initial data if empty."""
+    """Seed all 396 banks from the official French banking registry (Philtr/BdF source)."""
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM banks")
     if c.fetchone()[0] > 0:
         conn.close()
         return
-
     banks = [
-        ("30004","BNP Paribas","16 BOULEVARD DES ITALIENS","PARIS","75009","FR","BNPAFRPP","Etablissement de crédit","",""),
-        ("30003","Société générale","189 RUE D AUBERVILLIERS","PARIS CEDEX 18","75886","FR","SOGEFRPP","Etablissement de crédit","",""),
-        ("30006","Crédit Agricole S.A.","12 PLACE DES ETATS UNIS","MONTROUGE","92120","FR","AGRIFRPP","Etablissement de crédit","",""),
-        ("30002","CREDIT LYONNAIS (LCL)","18 rue de la République","LYON","69002","FR","CRLYFRPP","Etablissement de crédit","",""),
-        ("30007","Natixis","30 AVENUE PIERRE MENDES FRANCE","PARIS 13","75013","FR","NATXFRPP","Etablissement de crédit","",""),
-        ("20041","La Banque Postale","115 RUE DE SÈVRES","PARIS CEDEX 06","75275","FR","PSSTFRPP","Etablissement de crédit","",""),
-        ("10107","BRED - Banque populaire","18 QUAI DE LA RAPEE","PARIS 12","75012","FR","BREDFRPP","Etablissement de crédit","",""),
-        ("40618","Boursorama","18 QUAI DU POINT DU JOUR","BOULOGNE BILLANCOURT","92100","FR","BOUSFRPP","Etablissement de crédit","",""),
-        ("30056","HSBC Continental Europe","38 AVENUE KLEBER","PARIS","75116","FR","CCFRFRPP","Etablissement de crédit","",""),
-        ("30438","ING Bank NV","40 AVENUE DES TERROIRS DE FRANCE","PARIS 12","75012","FR","INGBFRPP","Etablissement de crédit","",""),
-        ("30066","CIC","6 AVENUE DE PROVENCE","PARIS 09","75009","FR","CMCIFRPP","Etablissement de crédit","",""),
-        ("30076","Crédit du Nord","28 PLACE RIHOUR","LILLE CEDEX","59023","FR","NORDFRPP","Etablissement de crédit","",""),
-        ("16188","BPCE","50 AVENUE PIERRE MENDES FRANCE","PARIS 13","75013","FR","BPCEFRPP","Etablissement de crédit","",""),
-        ("18359","Bpifrance","27-31 AVENUE DU GÉNÉRAL LECLERC","MAISONS - ALFORT","94710","FR","","Etablissement de crédit","",""),
-        ("42559","Crédit coopératif","12 BOULEVARD PESARO","NANTERRE CEDEX","92024","FR","CCOPFRPP","Etablissement de crédit","",""),
-        ("30788","Banque Neuflize OBC","3 AVENUE HOCHE","PARIS 08","75008","FR","NEIOFR22","Etablissement de crédit","",""),
-        ("40978","Banque Palatine","42 RUE D'ANJOU","PARIS CEDEX 08","75382","FR","PALFFR22","Etablissement de crédit","",""),
-        ("18370","ORANGE BANK","67 RUE ROBESPIERRE","MONTREUIL","93100","FR","","Etablissement de crédit","",""),
-        ("28233","REVOLUT PAYMENTS UAB","3 RUE DE STOCKHOLM","PARIS","75008","FR","REVOLT21","Autre institution","",""),
-        ("20433","N26 BANK GMBH","","","","DE","NTSBDEB1","Etablissement de crédit","",""),
-        ("28033","KLARNA BANK AB","","","","SE","KLNOSE22","Etablissement de crédit","",""),
-        ("19870","Carrefour banque","9-13 AVENUE DU LAC","EVRY-COURCOURONNES","91000","FR","","Etablissement de crédit","",""),
-        ("12869","ONEY BANK","40 AVENUE DE FLANDRE","CROIX CEDEX","59964","FR","ONEYFRPP","Etablissement de crédit","",""),
-        ("14940","Cofidis","61 AVENUE HALLEY","VILLENEUVE D'ASCQ CEDEX","59866","FR","","Etablissement de crédit","",""),
-        ("16218","Bforbank","20 AVENUE ANDRÉ PROTHIN","PARIS LA DEFENSE CEDEX","92927","FR","","Etablissement de crédit","",""),
-        ("31489","Crédit agricole CIB","12 PLACE DES ETATS-UNIS","Montrouge Cedex","92547","FR","BSUIFRPP","Etablissement de crédit","",""),
-        ("43199","Crédit Foncier de France","19 RUE DES CAPUCINES","PARIS 01","75001","FR","","Etablissement de crédit","",""),
-        ("25533","Goldman Sachs Bank Europe SE","5 Avenue Kléber","PARIS","75116","FR","GOLDFRPP","Etablissement de crédit","",""),
-        ("30748","Lazard Frères Banque","121 BOULEVARD HAUSSMANN","PARIS 08","75008","FR","LAZAFRPP","Etablissement de crédit","",""),
-        ("30758","UBS (France) S.A.","69 BOULEVARD HAUSSMANN","PARIS 08","75008","FR","UBSWFRPP","Etablissement de crédit","",""),
-        ("11833","ICBC (Europe) SA","73 BOULEVARD HAUSSMANN","PARIS 08","75008","FR","ICBKFRPP","Etablissement de crédit","",""),
-        ("30628","JPMorgan Chase bank","14 PLACE VENDOME","PARIS 01","75001","FR","CHASFRPP","Etablissement de crédit","",""),
-        ("17789","Deutsche bank AG","3-5 avenue de Friedland","PARIS CEDEX 08","","FR","DEUTFRPP","Etablissement de crédit","",""),
-        ("18769","Bank of China limited","23 AVENUE DE LA GRANDE ARMEE","PARIS 16","75116","FR","BKCHFRPP","Etablissement de crédit","",""),
-        ("41189","BBVA","29 AVENUE DE L OPERA","PARIS 01","75001","FR","BBVAFRPP","Etablissement de crédit","",""),
-        ("44729","Banco Santander SA","40 RUE DE COURCELLES","PARIS 08","75008","FR","BSCHFRPP","Etablissement de crédit","",""),
-        ("30001","BANQUE DE FRANCE","1 RUE LA VRILLIERE","PARIS 01","75001","FR","BDFEFRPP","Banque centrale","",""),
-        ("15208","Crédit municipal de Paris","55 RUE DES FRANCS-BOURGEOIS","PARIS CEDEX 04","75181","FR","","Etablissement de crédit","",""),
-        ("12548","Axa banque","203-205 RUE CARNOT","FONTENAY-SOUS-BOIS CEDEX","94138","FR","AXABFRPP","Etablissement de crédit","",""),
-        ("12240","Allianz banque","TOUR ALLIANZ ONE 1 COURS MICHELET","Paris La défense Cedex","92076","FR","","Etablissement de crédit","",""),
-        ("13507","Banque populaire du Nord","847 AVENUE DE LA REPUBLIQUE","MARCQ EN BAROEUL","59700","FR","CCBPFRPP","Etablissement de crédit","",""),
-        ("16807","BP Auvergne Rhône Alpes","4 BOULEVARD EUGENE DERUELLE","Lyon","69003","FR","CCBPFRPP","Etablissement de crédit","",""),
-        ("17515","CE Ile-de-France","19 RUE DU LOUVRE","PARIS CEDEX 1","75021","FR","CEPAFRPP","Etablissement de crédit","",""),
-        ("11315","Caisse d'Epargne CEPAC","PLACE ESTRANGIN PASTRÉ","MARSEILLE CEDEX 6","13254","FR","CEPAFRPP","Etablissement de crédit","",""),
-        ("11188","RCI Banque","15 RUE D UZES","PARIS","75002","FR","RCIEFR22","Etablissement de crédit","",""),
-        ("24599","Milleis Banque","32 AVENUE GEORGE V","PARIS 08","75008","FR","MILLFRPP","Etablissement de crédit","",""),
-        ("19530","Amundi","91-93 BOULEVARD PASTEUR","PARIS CEDEX 15","75730","FR","","Etablissement de crédit","",""),
-        ("45129","AFD","5 RUE ROLAND BARTHES","PARIS 12","75012","FR","","Autre institution","",""),
-        ("18059","HSBC Bank Plc Paris Branch","38 AVENUE KLEBER","PARIS","75116","FR","CCFRFRPP","Etablissement de crédit","",""),
-        ("14690","Monabanq.","61 AVENUE HALLEY","VILLENEUVE D ASCQ","59650","FR","","Etablissement de crédit","",""),
+        ('18989', 'Aareal bank AG', '29 B RUE D ASTORG', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13678', 'ABN AMRO ASSET BASED FINANCE N.V.', '39 rue Anatole France', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Autre institution', ''),
+        ('11938', 'AGCO FINANCE', 'BP 90 Avenue Blaise Pascal', 'BEAUVAIS CEDEX', '60007', 'FR', '', 'Autre institution', ''),
+        ('45129', 'AGENCE FRANCAISE DE DEVELOPPEMENT', '5 RUE ROLAND BARTHES', 'PARIS 12', '75012', 'FR', '', 'Autre institution', ''),
+        ('16688', 'AGENCE FRANCE LOCALE', 'TOUR OXYGENE 10 BOULEVARD MARIUS VIVIER MERLE', 'LYON', '69003', 'FR', '', 'Etablissement de crédit', ''),
+        ('41829', 'Al Khaliji France', '49 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('26633', 'Allfunds Bank S.A.U.', 'Spaces Opera Garnier 7 Rue Meyerbeer', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('12240', 'Allianz banque', 'TOUR ALLIANZ ONE 1 COURS MICHELET', 'Paris La defense Cedex', '92076', 'FR', '', 'Etablissement de crédit', ''),
+        ('17408', 'ALMA', '176 AVENUE CHARLES DE GAULLE', 'NEUILLY SUR SEINE', '92200', 'FR', '', 'Autre institution', ''),
+        ('16160', 'Alsabail', 'BP 80 7 PLACE BRANT', 'STRASBOURG CEDEX', '67001', 'FR', '', 'Autre institution', ''),
+        ('19530', 'Amundi', '91-93 BOULEVARD PASTEUR', 'PARIS CEDEX 15', '75730', 'FR', '', 'Etablissement de crédit', ''),
+        ('14328', 'Amundi finance', '90 BOULEVARD PASTEUR', 'PARIS 15', '75015', 'FR', '', 'Etablissement de crédit', ''),
+        ('15638', 'Andbank Monaco S.A.M.', '1 avenue des Citronniers', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('18979', 'ARAB BANKING CORPORATION SA', '4 RUE AUBER', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('16298', 'Arkea banking services', 'Tour 5 PLACE DE LA PYRAMIDE', 'PARIS LA DEFENSE CEDEX', '92088', 'FR', '', 'Etablissement de crédit', ''),
+        ('18829', 'Arkea banque entreprises et institutionnels', '3 AVENUE D ALPHASIS CS 96856', 'SAINT GREGOIRE', '35760', 'FR', '', 'Etablissement de crédit', ''),
+        ('14518', 'ARKEA DIRECT BANK', 'La D TOUR ARIANE 5 PLACE DE LA PYRAMIDE', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
+        ('16088', 'Arkea Home Loans SFH', 'BP 10 232 RUE GENERAL PAULET', 'BREST CEDEX 9', '29802', 'FR', '', 'Etablissement de crédit', ''),
+        ('16358', 'Arkea public sector SCF', '1 RUE LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
+        ('15980', 'Arkea credit bail', 'IMMEUBLE LE SEXTANT 255 RUE DE SAINT-MALO', 'RENNES CEDEX', '35700', 'FR', '', 'Autre institution', ''),
+        ('23890', 'Attijariwafa bank europe', '6 RUE CHAUCHAT', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('16668', 'Australia and New Zealand banking group limited', '6 RUE LAMENNAIS', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13558', 'Auxifip', 'CS 30 12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
+        ('16318', 'AXA BANK EUROPE SCF', '203/205 RUE CARNOT', 'FONTENAY SOUS BOIS CEDEX', '94138', 'FR', '', 'Etablissement de crédit', ''),
+        ('12548', 'Axa banque', '203-205 RUE CARNOT', 'FONTENAY-SOUS-BOIS CEDEX', '94138', 'FR', 'AXABFRPP', 'Etablissement de crédit', ''),
+        ('25080', 'Axa banque financement', '203-205 RUE CARNOT', 'FONTENAY-SOUS-BOIS CEDEX', '94138', 'FR', '', 'Etablissement de crédit', ''),
+        ('17188', 'AXA Home Loan SFH', '203 RUE CARNOT', 'FONTENAY-SOUS-BOIS', '94138', 'FR', '', 'Etablissement de crédit', ''),
+        ('11078', 'BAIL ACTEA IMMOBILIER', 'TOUR DE LILLE 60 BOULEVARD DE TURIN', 'LILLE', '59777', 'FR', '', 'Autre institution', ''),
+        ('15970', 'Bail-Actea', '4 PLACE RICHEBE', 'LILLE', '59800', 'FR', '', 'Autre institution', ''),
+        ('14908', 'Banca popolare di Sondrio Suisse', '3 rue Princesse Florestine', 'MONACO CEDEX', '98011', 'MC', '', 'Etablissement de crédit', ''),
+        ('41189', 'Banco Bilbao Vizcaya Argentaria (BBVA)', '29 AVENUE DE L OPERA', 'PARIS 01', '75001', 'FR', 'BBVAFRPP', 'Etablissement de crédit', ''),
+        ('19229', 'Banco de Sabadell', '127 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('41139', 'Banco do Brasil AG', '29 avenue kleber', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('44729', 'Banco Santander SA', '40 RUE DE COURCELLES', 'PARIS 08', '75008', 'FR', 'BSCHFRPP', 'Etablissement de crédit', ''),
+        ('18089', 'Bank Audi France', '73 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14508', 'Bank Julius Baer (Monaco) S.A.M.', '12 BOULEVARD DES MOULINS', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('41259', 'Bank Melli Iran', '43 AVENUE MONTAIGNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('41219', 'BANK OF AMERICA EUROPE', '51 Rue la Boetie', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18769', 'Bank of China limited', '23 AVENUE DE LA GRANDE ARMEE', 'PARIS 16', '75116', 'FR', 'BKCHFRPP', 'Etablissement de crédit', ''),
+        ('19533', 'BANK OF COMMUNICATIONS (LUXEMBOURG) S.A.', 'Avenue des Champs Elysees 90', 'Paris', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14879', 'Bank of India', '4 RUE HALEVY', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('44269', 'Bank Saderat Iran', '16 RUE DE LA PAIX', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('17799', 'Bank Sepah', '20 RUE AUGUSTE VACQUERIE', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('17579', 'Bank Tejarat', '124 RUE DE PROVENCE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('17599', 'Banque Banorient France', '21 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('12579', 'Banque BCP', '16 RUE HEROLD', 'PARIS', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('12179', 'Banque BIA', '67 AVENUE FRANKLIN DELANO ROOSEVELT', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('12468', 'Banque cantonale de Geneve France S.A.', '20 PLACE LOUIS PRADEL', 'LYON 01', '69001', 'FR', '', 'Etablissement de crédit', ''),
+        ('17519', 'Banque centrale de compensation', '18 RUE DU 4 SEPTEMBRE', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('41439', 'Banque Chaabi du Maroc', '49 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('24659', 'Banque Chabrières', '24 RUE AUGUSTE CHABRIÈRES', 'PARIS CEDEX 15', '75737', 'FR', '', 'Etablissement de crédit', ''),
+        ('10188', 'Banque Chalus', '5 PLACE DE JAUDE', 'CLERMONT-FERRAND', '63002', 'FR', '', 'Etablissement de crédit', ''),
+        ('30087', 'Banque CIC Est', '31 RUE JEAN WENGER-VALENTIN', 'STRASBOURG CEDEX 9', '67958', 'FR', '', 'Etablissement de crédit', ''),
+        ('30027', 'Banque CIC Nord Ouest', '33 AVENUE LE CORBUSIER', 'LILLE', '59800', 'FR', '', 'Etablissement de crédit', ''),
+        ('30047', 'Banque CIC Ouest', 'BP 84 2 AVENUE JEAN-CLAUDE BONDUELLE', 'NANTES CEDEX 1', '44040', 'FR', '', 'Etablissement de crédit', ''),
+        ('10057', 'Banque CIC Sud Ouest', 'BP 50 20 QUAI DES CHARTRONS', 'BORDEAUX CEDEX', '33058', 'FR', '', 'Etablissement de crédit', ''),
+        ('10268', 'Banque Courtois', '33 RUE DE REMUSAT', 'TOULOUSE', '31000', 'FR', '', 'Etablissement de crédit', ''),
+        ('44149', 'WORMSER FRERES Banque d escompte', '13 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('30001', 'BANQUE DE FRANCE', '1 RUE LA VRILLIERE', 'PARIS 01', '75001', 'FR', 'BDFEFRPP', 'Banque centrale', ''),
+        ('10548', 'Banque de Savoie', '6 BOULEVARD DU THEATRE', 'CHAMBERY CEDEX', '73024', 'FR', '', 'Etablissement de crédit', ''),
+        ('43030', 'Banque Degroof Petercam France', '44 RUE DE LISBONNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('12879', 'Banque Delubac et Cie', 'BP 53 16 PLACE SALEON TERRAS', 'LE CHEYLARD', '07160', 'FR', '', 'Etablissement de crédit', ''),
+        ('18079', 'Banque des Caraibes', 'BP 55 30 RUE FREBAULT', 'POINTE-A-PITRE CEDEX', '97152', 'FR', '', 'Etablissement de crédit', ''),
+        ('30258', 'Banque BTP', '48 RUE LA PEROUSE', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('13149', 'Banque Edel SNC', '60 RUE BUISSONNIERE', 'LABEGE CEDEX', '31676', 'FR', '', 'Etablissement de crédit', ''),
+        ('11899', 'Banque Europeenne du Credit Mutuel', '4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
+        ('16548', 'Banque europeenne du credit mutuel Monaco', '8 rue Grimaldi', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('11808', 'Banque federative du credit mutuel', 'BP 41 4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
+        ('11449', 'BANQUE FIDUCIAL', '41 RUE DU CAPITAINE GUYNEMER', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
+        ('18719', 'Banque Francaise Commerciale Ocean Indien', '58 RUE ALEXIS DE VILLENEUVE', 'ST DENIS CEDEX', '97404', 'FR', '', 'Etablissement de crédit', ''),
+        ('18869', 'Banque francaise mutualiste', '56 RUE DE LA GLACIERE', 'PARIS', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('16038', 'BANQUE HAVILLAND MONACO S.A.M.', '32/34 bd Princesse Charlotte', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('11438', 'Banque Hottinguer', '63 RUE DE LA VICTOIRE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('40398', 'Banque internationale de commerce BRED', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
+        ('24349', 'Banque J. Safra Sarasin Monaco SA', '15bis-17 avenue Ostende', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('13259', 'Banque Kolb', '1-3 PLACE DU GENERAL DE GAULLE', 'MIRECOURT', '88500', 'FR', '', 'Etablissement de crédit', ''),
+        ('10228', 'Banque Laydernier', '10 AVENUE DU RHONE', 'ANNECY', '74000', 'FR', '', 'Etablissement de crédit', ''),
+        ('17959', 'Banque Michel Inchauspé BAMI', '76 AVENUE DU 8 MAI 1945', 'BAYONNE', '64100', 'FR', '', 'Etablissement de crédit', ''),
+        ('18569', 'Banque Misr', '9 RUE AUBER', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('30788', 'Banque Neuflize OBC', '3 AVENUE HOCHE', 'PARIS 08', '75008', 'FR', 'NEIOFR22', 'Etablissement de crédit', ''),
+        ('19730', 'Banque Nomura France', '7 PLACE D IENA', 'PARIS CEDEX 16', '75773', 'FR', '', 'Etablissement de crédit', ''),
+        ('13489', 'Banque Nuger', 'BP 56 5 PLACE MICHEL DE L HOSPITAL', 'CLERMONT-FERRAND CEDEX', '63002', 'FR', '', 'Etablissement de crédit', ''),
+        ('40978', 'Banque Palatine', '42 RUE D ANJOU', 'PARIS CEDEX 08', '75382', 'FR', '', 'Etablissement de crédit', ''),
+        ('14707', 'Banque populaire Alsace Lorraine Champagne', 'BP 12 3 RUE FRANCOIS DE CUREL', 'METZ CEDEX 1', '57021', 'FR', '', 'Etablissement de crédit', ''),
+        ('10907', 'Banque populaire Aquitaine Centre Atlantique', '10 QUAI DES QUEYRIES', 'BORDEAUX', '33100', 'FR', '', 'Etablissement de crédit', ''),
+        ('16807', 'BANQUE POPULAIRE AUVERGNE RHONE ALPES', 'CS 80 4 BOULEVARD EUGENE DERUELLE', 'Lyon', '69003', 'FR', '', 'Etablissement de crédit', ''),
+        ('10807', 'Banque populaire Bourgogne Franche-Comte', 'BP 31 14 BD DE LA TREMOUILLE', 'DIJON CEDEX', '21008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13507', 'Banque populaire du Nord', '847 AVENUE DE LA REPUBLIQUE', 'MARCQ EN BAROEUL', '59700', 'FR', '', 'Etablissement de crédit', ''),
+        ('16607', 'Banque populaire du Sud', '38 BOULEVARD GEORGES CLEMENCEAU', 'PERPIGNAN CEDEX 09', '66966', 'FR', '', 'Etablissement de crédit', ''),
+        ('13807', 'Banque populaire Grand Ouest', '15 BOULEVARD DE LA BOUTIERE', 'SAINT GREGOIRE', '35760', 'FR', '', 'Etablissement de crédit', ''),
+        ('14607', 'BANQUE POPULAIRE MEDITERRANEE', '457 PROMENADE DES ANGLAIS', 'Nice', '06200', 'FR', '', 'Etablissement de crédit', ''),
+        ('17807', 'Banque populaire Occitane', '33 AVENUE GEORGES POMPIDOU', 'BALMA', '31130', 'FR', '', 'Etablissement de crédit', ''),
+        ('10207', 'Banque populaire Rives de Paris', '76 AVENUE DE FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('18707', 'Banque populaire Val de France', '9 AVENUE NEWTON', 'MONTIGNY LE BRETONNEUX', '78180', 'FR', '', 'Etablissement de crédit', ''),
+        ('11989', 'Banque Pouyanne', '12 PLACE D ARMES', 'ORTHEZ', '64300', 'FR', '', 'Etablissement de crédit', ''),
+        ('13168', 'Banque PSA finance', '2 BOULEVARD DE L EUROPE', 'POISSY', '78300', 'FR', '', 'Etablissement de crédit', ''),
+        ('17649', 'Banque Revillon', '40 RUE LA BOETIE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('10468', 'Banque Rhone-Alpes', '20 BOULEVARD EDOUARD REY', 'GRENOBLE', '38000', 'FR', '', 'Etablissement de crédit', ''),
+        ('19069', 'BANQUE RICHELIEU FRANCE', '1 RUE PAUL CEZANNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13338', 'BANQUE RICHELIEU MONACO', '8 AVENUE DE GRANDE BRETAGNE', 'MONACO CEDEX', '98005', 'MC', '', 'Etablissement de crédit', ''),
+        ('13579', 'Banque Saint-Olive', '84 RUE DU GUESCLIN', 'LYON 06', '69006', 'FR', '', 'Etablissement de crédit', ''),
+        ('17779', 'Banque SBA', '68 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('10558', 'Banque Tarneaud', '2 RUE TURGOT', 'LIMOGES', '87000', 'FR', '', 'Etablissement de crédit', ''),
+        ('30568', 'Banque Transatlantique S.A.', '26 AVENUE FRANKLIN-ROOSEVELT', 'PARIS CEDEX 08', '75372', 'FR', '', 'Etablissement de crédit', ''),
+        ('30588', 'Barclays Bank Ireland', '34/36 avenue de Friedland', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('12448', 'Barclays bank plc monaco', '31 avenue de la costa', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('10108', 'Bayerische landesbank', '203 RUE DU FAUBOURG SAINT HONORE', 'PARIS CEDEX 08', '75380', 'FR', '', 'Etablissement de crédit', ''),
+        ('17619', 'BEMO EUROPE BANQUE PRIVEE', '49 avenue d Iena', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('16218', 'Bforbank', 'TOUR EUROPLAZA 20 AVENUE ANDRE PROTHIN', 'PARIS LA DEFENSE CEDEX', '92927', 'FR', '', 'Etablissement de crédit', ''),
+        ('16158', 'BGFIBANK EUROPE', '10 RUE DU GENERAL FOY', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('15818', 'Binckbank NV', '102 RUE VICTOR HUGO', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Etablissement de crédit', ''),
+        ('12249', 'BMCE BANK INTERNATIONAL PLC', '6 rue Cambaceres', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14670', 'BMW Finance', '5 RUE DES HERONS', 'SAINT QUENTIN EN YVELINES', '78182', 'FR', '', 'Etablissement de crédit', ''),
+        ('30004', 'BNP Paribas', '16 BOULEVARD DES ITALIENS', 'PARIS', '75009', 'FR', 'BNPAFRPP', 'Etablissement de crédit', ''),
+        ('13088', 'BNP PARIBAS ANTILLES-GUYANE', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('18020', 'BNP Paribas Factor', 'SEINE WAY 12 RUE LOUIS BLERIOT', 'Rueil-Malmaison', '92500', 'FR', '', 'Autre institution', ''),
+        ('15668', 'BNP Paribas home loan SFH', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('30958', 'BNP Paribas Lease Group', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
+        ('18029', 'BNP Paribas Personal Finance', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('41919', 'BNP Paribas Reunion', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('41329', 'BNP Paribas securities services', '3 RUE D ANTIN', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('11498', 'BNP Paribas wealth management Monaco', '15/17 avenue d ostende', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('16168', 'BOA France', '20 RUE DE SAINT PETERSBOURG', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('40618', 'Boursorama', '18 QUAI DU POINT DU JOUR', 'BOULOGNE BILLANCOURT', '92100', 'FR', 'BOUSFRPP', 'Etablissement de crédit', ''),
+        ('16188', 'BPCE', '50 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', 'BPCEFRPP', 'Etablissement de crédit', ''),
+        ('12749', 'BPCE Bail', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('11138', 'BPCE Factor', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('14768', 'BPCE FINANCEMENT', '89 QUAI PANHARD ET LEVASSOR', 'PARIS CEDEX 13', '75634', 'FR', '', 'Autre institution', ''),
+        ('14888', 'BPCE International et Outremer', '88 AVENUE DE FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('11128', 'BPCE lease', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('16190', 'BPCE lease immo', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('16438', 'BPCE SFH', '50 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('44319', 'BPE', '60 RUE DU LOUVRE', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('18359', 'Bpifrance', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Etablissement de crédit', ''),
+        ('19649', 'Bpifrance Regions', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Autre institution', ''),
+        ('10107', 'BRED Banque populaire', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', 'BREDFRPP', 'Etablissement de crédit', ''),
+        ('12779', 'BRED Cofilease', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
+        ('14318', 'BRED Gestion', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
+        ('23779', 'Byblos bank Europe', '15 RUE LORD BYRON', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('11380', 'C.R.H. Caisse de refinancement de l habitat', '3 RUE LA BOETIE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('41539', 'CA Consumer Finance', '1 RUE VICTOR BASH CS 70001', 'MASSY CEDEX', '91068', 'FR', '', 'Etablissement de crédit', ''),
+        ('43799', 'CA INDOSUEZ WEALTH FRANCE', '17 RUE DU DOCTEUR LANCEREAUX', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18129', 'CACEIS Bank', '1 PLACE VALHUBERT', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('15429', 'Caisse agricole Credit Mutuel', '4 RUE FREDERIC GUILLAUME', 'STRASBOURG', '67000', 'FR', '', 'Etablissement de crédit', ''),
+        ('18609', 'Caisse centrale du credit immobilier de France', '26 RUE DE MADRID', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('45539', 'Caisse centrale du credit mutuel', '88-90 RUE CARDINET', 'PARIS CEDEX 17', '75847', 'FR', '', 'Etablissement de crédit', ''),
+        ('11315', 'Caisse d Epargne CEPAC', 'PLACE ESTRANGIN PASTRE', 'MARSEILLE CEDEX 6', '13254', 'FR', '', 'Etablissement de crédit', ''),
+        ('13335', 'Caisse d epargne Aquitaine Poitou-Charentes', '1 PARVIS CORTO MALTESE', 'BORDEAUX CEDEX', '33076', 'FR', '', 'Etablissement de crédit', ''),
+        ('14445', 'Caisse d epargne Bretagne-Pays de Loire', '2 PLACE GRASLIN', 'NANTES', '44003', 'FR', '', 'Etablissement de crédit', ''),
+        ('18315', 'Caisse d epargne Cote d Azur', '455 PROMENADE DES ANGLAIS', 'NICE CEDEX 3', '06205', 'FR', '', 'Etablissement de crédit', ''),
+        ('18715', 'Caisse d epargne Auvergne et du Limousin', '63 RUE MONTLOSIER', 'CLERMONT FERRAND', '63000', 'FR', '', 'Etablissement de crédit', ''),
+        ('12135', 'Caisse d epargne Bourgogne Franche-Comte', '1 ROND POINT DE LA NATION', 'DIJON CEDEX', '21005', 'FR', '', 'Etablissement de crédit', ''),
+        ('13135', 'Caisse d epargne Midi-Pyrenees', '10 AVENUE MAXWELL', 'TOULOUSE', '31100', 'FR', '', 'Etablissement de crédit', ''),
+        ('13825', 'Caisse d epargne Rhone Alpes', '116 COURS LAFAYETTE', 'LYON Cedex 03', '69404', 'FR', '', 'Etablissement de crédit', ''),
+        ('13485', 'Caisse d epargne Languedoc Roussillon', '254 RUE MICHEL TEULE', 'MONTPELLIER CEDEX 4', '34184', 'FR', '', 'Etablissement de crédit', ''),
+        ('15135', 'CAISSE D EPARGNE GRAND EST EUROPE', '1 AVENUE DU RHIN', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
+        ('16275', 'Caisse d epargne Hauts de France', '135 PONT DES FLANDRES', 'Euralille', '59777', 'FR', '', 'Etablissement de crédit', ''),
+        ('17515', 'Caisse d epargne Ile-de-France', '19 RUE DU LOUVRE', 'PARIS CEDEX 1', '75021', 'FR', 'CEPAFRPP', 'Etablissement de crédit', ''),
+        ('14265', 'Caisse d epargne Loire Drome Ardeche', 'ESPACE FAURIEL 17 RUE P. ET D. PONCHARDIER', 'SAINT-ETIENNE CEDEX 2', '42012', 'FR', '', 'Etablissement de crédit', ''),
+        ('14505', 'Caisse d epargne Loire-Centre', '7 RUE D ESCURES', 'ORLEANS', '45000', 'FR', '', 'Etablissement de crédit', ''),
+        ('11425', 'Caisse d epargne Normandie', '151 RUE D UELZEN', 'BOIS GUILLAUME BIHOREL', '76230', 'FR', '', 'Etablissement de crédit', ''),
+        ('15449', 'Caisse de Bretagne de credit mutuel agricole', '1 RUE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
+        ('6', 'Caisse des depots fonds d epargne', '72 AVENUE PIERRE MENDES-FRANCE', 'PARIS CEDEX 13', '75914', 'FR', '', 'Etablissement de crédit', ''),
+        ('40031', 'Caisse des depots section generale', '56 RUE DE LILLE', 'PARIS 07SP', '75356', 'FR', '', 'Etablissement de crédit', ''),
+        ('10278', 'Caisse federale de credit mutuel', '4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
+        ('15489', 'Caisse federale credit mutuel Maine-Anjou Basse-Normandie', '43 BOULEVARD VOLNEY', 'LAVAL CEDEX 9', '53083', 'FR', '', 'Etablissement de crédit', ''),
+        ('15629', 'Caisse federale credit mutuel Nord Europe', '4 PLACE RICHEBE', 'LILLE CEDEX', '59011', 'FR', '', 'Etablissement de crédit', ''),
+        ('15519', 'Caisse federale credit mutuel Ocean', '34 RUE LEANDRE MERLET', 'LA ROCHE-SUR-YON CEDEX', '85001', 'FR', '', 'Etablissement de crédit', ''),
+        ('18589', 'Caisse francaise de developpement industriel', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('14388', 'Caisse Francaise de Financement Local', '1 PASSERELLE DES REFLETS', 'ISSY-LES-MOULINEAUX', '92130', 'FR', '', 'Etablissement de crédit', ''),
+        ('11306', 'CA mutuel Alpes Provence', '25 CHEMIN DES TROIS CYPRES', 'AIX EN PROVENCE', '13097', 'FR', '', 'Etablissement de crédit', ''),
+        ('17206', 'CA mutuel Alsace Vosges', '1 PLACE DE LA GARE', 'STRASBOURG', '67008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14706', 'CA mutuel Atlantique Vendee', 'LA GARDE ROUTE DE PARIS', 'NANTES CEDEX9', '44949', 'FR', '', 'Etablissement de crédit', ''),
+        ('18706', 'CA mutuel Brie Picardie', '500 RUE SAINT-FUSCIEN', 'AMIENS CEDEX 3', '80095', 'FR', '', 'Etablissement de crédit', ''),
+        ('14806', 'CA mutuel Centre Loire', '8 ALLEE DES COLLEGES', 'BOURGES', '18000', 'FR', '', 'Etablissement de crédit', ''),
+        ('17806', 'CA mutuel Centre-Est', '1 RUE PIERRE TRUCHIS DE LAYS', 'CHAMPAGNE AU MONT D OR', '69410', 'FR', '', 'Etablissement de crédit', ''),
+        ('11706', 'CA mutuel Charente-Maritime Deux-Sevres', '14 RUE LOUIS TARDY', 'LAGORD', '17140', 'FR', '', 'Etablissement de crédit', ''),
+        ('12406', 'CA mutuel Charente-Perigord', 'RUE D EPAGNAC', 'SOYAUX', '16800', 'FR', '', 'Etablissement de crédit', ''),
+        ('13306', 'CA mutuel Aquitaine', '106 QUAI DE BACALAN', 'BORDEAUX CEDEX', '33076', 'FR', '', 'Etablissement de crédit', ''),
+        ('13606', 'CA mutuel Ille-et-Vilaine', '4 RUE LOUIS BRAILLE', 'ST JACQUES DE LA LANDE', '35136', 'FR', '', 'Etablissement de crédit', ''),
+        ('16806', 'CA mutuel Centre France', '3 AVENUE DE LA LIBERATION', 'CLERMONT FERRAND CEDEX1', '63045', 'FR', '', 'Etablissement de crédit', ''),
+        ('11006', 'CA mutuel Champagne-Bourgogne', '269 FAUBOURG CRONCELS', 'TROYES CEDEX', '10080', 'FR', '', 'Etablissement de crédit', ''),
+        ('12506', 'CA mutuel Franche-Comte', '11 AVENUE ELISEE CUSENIER', 'BESANCON CEDEX 9', '25084', 'FR', '', 'Etablissement de crédit', ''),
+        ('17906', 'CA mutuel Anjou et du Maine', '40 RUE PREMARTINE', 'LE MANS CEDEX 9', '72083', 'FR', '', 'Etablissement de crédit', ''),
+        ('12006', 'CA mutuel Corse', '1 AVENUE NAPOLEON III', 'AJACCIO CEDEX', '20193', 'FR', '', 'Etablissement de crédit', ''),
+        ('14006', 'CA mutuel Guadeloupe', 'PETIT PEROU', 'ABYMES CEDEX', '97176', 'FR', '', 'Etablissement de crédit', ''),
+        ('19806', 'CA mutuel Martinique et Guyane', 'RUE CASE NEGRE PLACE D ARMES', 'LE LAMENTIN CEDEX 2', '97232', 'FR', '', 'Etablissement de crédit', ''),
+        ('19906', 'CA mutuel Reunion', 'CITE DES LAURIERS', 'SAINT-DENIS CEDEX', '97462', 'FR', '', 'Etablissement de crédit', ''),
+        ('19406', 'CA mutuel Touraine et Poitou', '18 RUE SALVADOR ALLENDE', 'POITIERS CEDEX', '86008', 'FR', '', 'Etablissement de crédit', ''),
+        ('16106', 'CA mutuel Lorraine', 'CS 71700', 'NANCY CEDEX', '54017', 'FR', '', 'Etablissement de crédit', ''),
+        ('16606', 'CA mutuel Normandie', '15 ESPL. BRILLAUD DE LAUJARDIERE', 'CAEN CEDEX', '14050', 'FR', '', 'Etablissement de crédit', ''),
+        ('18206', 'CA mutuel Paris et Ile-de-France', '26 QUAI DE LA RAPEE', 'PARIS CEDEX 12', '75596', 'FR', '', 'Etablissement de crédit', ''),
+        ('12206', 'CA mutuel Cotes-d Armor', 'LA CROIX TUAL', 'PLOUFRAGAN', '22440', 'FR', '', 'Etablissement de crédit', ''),
+        ('18106', 'CA mutuel des Savoie', '4 AVENUE DU PRE-FELIN', 'ANNECY LE VIEUX', '74985', 'FR', '', 'Etablissement de crédit', ''),
+        ('19506', 'CA mutuel Centre Ouest', '29 BOULEVARD DE VANTEAUX', 'LIMOGES CEDEX', '87044', 'FR', '', 'Etablissement de crédit', ''),
+        ('12906', 'CA mutuel Finistere', '7 ROUTE DU LOCH', 'QUIMPER CEDEX 9', '29555', 'FR', '', 'Etablissement de crédit', ''),
+        ('13506', 'CA mutuel Languedoc', 'AVENUE DE MONPELLIERET', 'LATTES CEDEX', '34977', 'FR', '', 'Etablissement de crédit', ''),
+        ('16006', 'CA mutuel Morbihan', 'AVENUE DE KERANGUEN', 'VANNES CEDEX 9', '56956', 'FR', '', 'Etablissement de crédit', ''),
+        ('10206', 'CA mutuel Nord Est', '25 RUE LIBERGIER', 'REIMS CEDEX', '51088', 'FR', '', 'Etablissement de crédit', ''),
+        ('14506', 'CA mutuel Loire Haute-Loire', '94 RUE BERGSON', 'ST ETIENNE Cedex 1', '42007', 'FR', '', 'Etablissement de crédit', ''),
+        ('16706', 'CA mutuel Nord de France', '10 AVENUE FOCH', 'LILLE CEDEX', '59020', 'FR', '', 'Etablissement de crédit', ''),
+        ('11206', 'CA mutuel Nord Midi-Pyrenees', '219 AVENUE FRANCOIS VERDIER', 'ALBI CEDEX 9', '81022', 'FR', '', 'Etablissement de crédit', ''),
+        ('18306', 'CA mutuel Normandie-Seine', 'CS 70800', 'BOIS GUILLAUME CEDEX', '76238', 'FR', '', 'Etablissement de crédit', ''),
+        ('19106', 'CA mutuel Provence-Cote d Azur', 'AVENUE PAUL ARENE', 'DRAGUIGNAN', '83300', 'FR', '', 'Etablissement de crédit', ''),
+        ('16906', 'CA mutuel Pyrenees-Gascogne', '11 BOULEVARD PRESIDENT KENNEDY', 'TARBES CEDEX', '65003', 'FR', '', 'Etablissement de crédit', ''),
+        ('13906', 'CA mutuel Sud Rhone-Alpes', '12 PLACE DE LA RESISTANCE', 'GRENOBLE', '38000', 'FR', '', 'Etablissement de crédit', ''),
+        ('17106', 'CA mutuel Sud-Mediterranee', '30 RUE PIERRE BRETONNEAU', 'PERPIGNAN CEDEX', '66832', 'FR', '', 'Etablissement de crédit', ''),
+        ('13106', 'CA mutuel Toulouse 31', '6-7 PLACE JEANNE D ARC', 'TOULOUSE CEDEX 6', '31005', 'FR', '', 'Etablissement de crédit', ''),
+        ('14406', 'CA mutuel Val de France', '1 RUE DANIEL BOUTET', 'CHARTRES CEDEX', '28023', 'FR', '', 'Etablissement de crédit', ''),
+        ('13798', 'Caisse solidaire', '235 BOULEVARD PAUL PAINLEVE', 'LILLE', '59000', 'FR', '', 'Etablissement de crédit', ''),
+        ('12619', 'Caixa geral de depositos S.A.', '38 RUE DE PROVENCE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('12933', 'Caixabank', '2 rue de Goethe', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('14648', 'Capitole Finance Tofinso', '2839 AVENUE DE LA LAURAGAISE', 'LABEGE CEDEX', '31682', 'FR', '', 'Etablissement de crédit', ''),
+        ('19870', 'Carrefour banque', '9-13 AVENUE DU LAC', 'EVRY-COURCOURONNES', '91000', 'FR', '', 'Etablissement de crédit', ''),
+        ('11307', 'CASDEN Banque Populaire', '91 COURS DES ROCHES', 'CHAMPS SUR MARNE', '77420', 'FR', '', 'Etablissement de crédit', ''),
+        ('12739', 'CFM Indosuez Wealth', '11 boulevard albert 1er', 'Monaco cedex', '98012', 'MC', '', 'Etablissement de crédit', ''),
+        ('17208', 'CHECKOUT', '52 BOULEVARD DE SEBASTOPOL', 'PARIS', '75003', 'FR', '', 'Autre institution', ''),
+        ('18233', 'CHINA CONSTRUCTION BANK EUROPE S.A', '86-88 Boulevard Haussmann', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('10918', 'Cholet Dupont', '16 PLACE DE LA MADELEINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('16700', 'Cicobail', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('14658', 'CIF EUROMORTGAGE', '26 RUE DE MADRID', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('11689', 'CITIBANK EUROPE', '21-25 Rue Balzac', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14218', 'Claas financial services', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
+        ('22040', 'Confederation Nationale du Credit Mutuel', '88-90 Rue Cardinet', 'Paris cedex 17', '75847', 'FR', '', 'Etablissement de crédit', ''),
+        ('10218', 'Cooperatieve Rabobank U.A.', '69 BOULEVARD HAUSSMANN', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14940', 'Cofidis', '61 AVENUE HALLEY', 'VILLENEUVE D ASCQ CEDEX', '59866', 'FR', '', 'Etablissement de crédit', ''),
+        ('17629', 'Commerzbank ag', '23 rue de la Paix', 'PARIS CEDEX 02', '75084', 'FR', '', 'Etablissement de crédit', ''),
+        ('30051', 'Compagnie de financement foncier', '19 RUE DES CAPUCINES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('18189', 'Compagnie generale de credit aux particuliers Credipar', '2 BOULEVARD DE L EUROPE', 'POISSY Cedex', '78307', 'FR', '', 'Etablissement de crédit', ''),
+        ('31489', 'Credit agricole corporate and investment bank', '12 PLACE DES ETATS-UNIS', 'Montrouge Cedex', '92547', 'FR', '', 'Etablissement de crédit', ''),
+        ('15898', 'Credit Agricole home loan SFH', '12 PLACE DES ETATS UNIS', 'MONTROUGE', '92120', 'FR', '', 'Etablissement de crédit', ''),
+        ('16850', 'Credit agricole leasing & factoring', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
+        ('16468', 'Credit Agricole Public Sector SCF', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92127', 'FR', '', 'Etablissement de crédit', ''),
+        ('30006', 'Credit Agricole S.A.', '12 PLACE DES ETATS UNIS', 'MONTROUGE', '92120', 'FR', 'AGRIFRPP', 'Etablissement de crédit', ''),
+        ('42559', 'Credit cooperatif', '12 BOULEVARD PESARO', 'NANTERRE CEDEX', '92024', 'FR', 'CCOPFRPP', 'Etablissement de crédit', ''),
+        ('30076', 'Credit du Nord', '28 PLACE RIHOUR', 'LILLE CEDEX', '59023', 'FR', 'NORDFRPP', 'Etablissement de crédit', ''),
+        ('43199', 'Credit Foncier de France', '19 RUE DES CAPUCINES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('15149', 'Credit foncier et communal Alsace et Lorraine', '1 RUE DU DOME', 'STRASBOURG CEDEX', '67003', 'FR', '', 'Etablissement de crédit', ''),
+        ('16718', 'Credit Immobilier de France Developpement', '26/28 RUE DE MADRID', 'PARIS CEDEX 08', '75384', 'FR', '', 'Autre institution', ''),
+        ('30066', 'Credit industriel et commercial CIC', '6 AVENUE DE PROVENCE', 'PARIS 09', '75009', 'FR', 'CMCIFRPP', 'Etablissement de crédit', ''),
+        ('30002', 'CREDIT LYONNAIS LCL', '18 rue de la Republique', 'LYON', '69002', 'FR', 'CRLYFRPP', 'Etablissement de crédit', ''),
+        ('10160', 'Credit mobilier de Monaco', '15 avenue de Grande-Bretagne', 'MONACO CEDEX', '98002', 'MC', '', 'Etablissement de crédit', ''),
+        ('15208', 'Credit municipal de Paris', '55 RUE DES FRANCS-BOURGEOIS', 'PARIS CEDEX 04', '75181', 'FR', '', 'Etablissement de crédit', ''),
+        ('15589', 'Credit mutuel Arkea', '1 RUE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
+        ('11978', 'Credit Mutuel Factoring', 'TOUR KUPKA A 18 RUE HOCHE', 'PARIS LA DEFENSE CEDEX', '92980', 'FR', '', 'Etablissement de crédit', ''),
+        ('15848', 'Credit Mutuel Home Loan SFH', '6 AVENUE DE PROVENCE', 'PARIS CEDEX 9', '75452', 'FR', '', 'Etablissement de crédit', ''),
+        ('13070', 'Credit Mutuel Leasing', '12 RUE GAILLON', 'PARIS CEDEX 02', '75107', 'FR', '', 'Etablissement de crédit', ''),
+        ('11600', 'Credit mutuel Real Estate Lease', '4 RUE GAILLON', 'PARIS CEDEX 02', '75107', 'FR', '', 'Etablissement de crédit', ''),
+        ('18169', 'Credit suisse Luxembourg S.A.', '25 avenue Kleber', 'PARIS', '75016', 'FR', '', 'Etablissement de crédit', ''),
+        ('16000', 'Diac', '14 AVENUE DU PAVE NEUF', 'NOISY-LE-GRAND CEDEX', '93168', 'FR', '', 'Etablissement de crédit', ''),
+        ('17290', 'Dexia credit local', '1 PASSERELLE DES REFLETS', 'LA DEFENSE CEDEX', '92913', 'FR', '', 'Etablissement de crédit', ''),
+        ('16048', 'Ebi SA', 'IMMEUBLE CONCORDE', 'PARIS LA DEFENSE CEDEX', '92057', 'FR', '', 'Etablissement de crédit', ''),
+        ('16658', 'EDENRED PAIEMENT', '166 BOULEVARD GABRIEL PERI', 'MALAKOFF', '92240', 'FR', '', 'Autre institution', ''),
+        ('42529', 'Edmond de Rothschild France', '47 RUE DU FAUBOURG SAINT HONORE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('11668', 'Edmond de Rothschild Monaco', 'Carlo Les Terrasses 2 avenue de Monte', 'MONACO CEDEX', '98006', 'MC', '', 'Etablissement de crédit', ''),
+        ('18759', 'EFG Bank Monaco', '15 avenue d Ostende Monte Carlo', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('22970', 'Epargne credit des militaires', 'QUARTIER SAINTE MUSSE RUE NICOLAS APPERT', 'Toulon', '83100', 'FR', '', 'Etablissement de crédit', ''),
+        ('17979', 'EUROPE ARAB BANK SA', '41 AVENUE DE FRIEDLAND', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13580', 'FACTOFRANCE', 'TOUR D2 17 BIS PLACE DES REFLETS', 'PARIS-LA DEFENSE CEDEX', '92988', 'FR', '', 'Etablissement de crédit', ''),
+        ('12478', 'FCE bank plc', '34 rue de la Croix de Fer', 'ST GERMAIN EN LAYE CEDEX', '78174', 'FR', '', 'Etablissement de crédit', ''),
+        ('15900', 'FEDERAL FINANCE', '1 ALLEE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
+        ('14628', 'FLOA', '71 RUE LUCIEN FAURE', 'BORDEAUX', '33300', 'FR', '', 'Etablissement de crédit', ''),
+        ('16760', 'Franfinance', '59 AVENUE DE CHATOU', 'RUEIL-MALMAISON CEDEX', '92853', 'FR', '', 'Autre institution', ''),
+        ('18689', 'Fransabank France S.A.', '104 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('16208', 'GE SCF', 'TOUR EUROPLAZA 20 AVENUE ANDRE PROTHIN', 'PARIS-LA-DEFENSE CEDEX', '92063', 'FR', '', 'Etablissement de crédit', ''),
+        ('19269', 'Genebanque', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
+        ('17660', 'Genefim', '29 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('25533', 'Goldman Sachs Bank Europe SE', '5 Avenue Kleber', 'PARIS', '75116', 'FR', 'GOLDFRPP', 'Etablissement de crédit', ''),
+        ('14120', 'GRESHAM Banque', '20 RUE DE LA BAUME', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18059', 'HSBC Bank Plc Paris Branch', '38 AVENUE KLEBER', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('30056', 'HSBC Continental Europe', '38 AVENUE KLEBER', 'PARIS', '75116', 'FR', 'CCFRFRPP', 'Etablissement de crédit', ''),
+        ('13888', 'HSBC Factoring France', '38 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Autre institution', ''),
+        ('14398', 'HSBC Leasing France', '38 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Autre institution', ''),
+        ('16058', 'HSBC SFH FRANCE', 'IMMEUBLE COEUR DEFENSE 110 ESPLANADE GENERAL DE GAULLE', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
+        ('16030', 'IBM France financement', '17 AVENUE DE L EUROPE', 'BOIS-COLOMBES CEDEX', '92275', 'FR', '', 'Autre institution', ''),
+        ('11833', 'ICBC Europe SA', '73 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'ICBKFRPP', 'Etablissement de crédit', ''),
+        ('30438', 'ING Bank NV', '40 AVENUE DES TERROIRS DE FRANCE', 'PARIS 12', '75012', 'FR', 'INGBFRPP', 'Etablissement de crédit', ''),
+        ('12818', 'IFCIC', '41 RUE DE LA CHAUSSEE D ANTIN', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('10128', 'Intesa Sanpaolo SpA', '62 RUE DE RICHELIEU', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('16433', 'J.P. Morgan AG', '14 Place Vendome', 'PARIS', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('12978', 'JCB Finance', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
+        ('15458', 'Joh. Berenberg Gossler & Co. KG', '48 AVENUE VICTOR HUGO', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('14108', 'John Deere financial', 'Rue du Paradis', 'Saint Jean de la ruelle', '45140', 'FR', '', 'Autre institution', ''),
+        ('30628', 'JPMorgan Chase bank', '14 PLACE VENDOME', 'PARIS 01', '75001', 'FR', 'CHASFRPP', 'Etablissement de crédit', ''),
+        ('27800', 'KBC bank', '6 RUE NICOLAS APPERT', 'LILLE CEDEX', '59030', 'FR', '', 'Etablissement de crédit', ''),
+        ('14989', 'KEB Hana Bank', '38 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('20041', 'La Banque Postale', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', 'PSSTFRPP', 'Etablissement de crédit', ''),
+        ('16178', 'LA BANQUE POSTALE CONSUMER FINANCE', '1-3 AVENUE FRANCOIS MITTERRAND', 'SAINT DENIS', '93200', 'FR', '', 'Autre institution', ''),
+        ('16608', 'LA BANQUE POSTALE HOME LOAN SFH', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', '', 'Etablissement de crédit', ''),
+        ('16478', 'La Banque Postale Leasing & Factoring', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', '', 'Autre institution', ''),
+        ('16068', 'Helaba Landesbank Hessen-Thuringen', '118 AVENUE DES CHAMPS ELYSEES', 'PARIS', '75108', 'FR', '', 'Etablissement de crédit', ''),
+        ('19063', 'Landesbank Saar SAARLB', '2 PLACE RAYMOND MONDON', 'METZ', '57000', 'FR', '', 'Etablissement de crédit', ''),
+        ('30748', 'Lazard Freres Banque', '121 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'LAZAFRPP', 'Etablissement de crédit', ''),
+        ('13150', 'LixxBail', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
+        ('44449', 'LixxCredit', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Autre institution', ''),
+        ('10800', 'Locam', '29 RUE LEON BLUM', 'ST ETIENNE', '42000', 'FR', '', 'Autre institution', ''),
+        ('16773', 'Lombard Odier Europe S.A', '8 RUE ROYALE', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('21670', 'Loomis FX Gold and Services', '42 RUE BENOIT MALON', 'Gentilly', '94250', 'FR', '', 'Etablissement de crédit', ''),
+        ('10096', 'Lyonnaise de banque', '8 RUE DE LA REPUBLIQUE', 'LYON CEDEX 01', '69207', 'FR', '', 'Etablissement de crédit', ''),
+        ('16908', 'Ma French Bank', '115 RUE DE SEVRES', 'Paris Cedex 06', '75275', 'FR', '', 'Etablissement de crédit', ''),
+        ('25833', 'Macquarie bank Europe DAC', '41 Avenue George V', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('11508', 'MARKET PAY', '33 AVENUE EMILE ZOLA', 'Boulogne-Billancourt', '92100', 'FR', '', 'Autre institution', ''),
+        ('15148', 'Mediobanca', '43 RUE DE LA BIENFAISANCE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18789', 'Mega international commercial bank Co Ltd', '131 RUE DE TOLBIAC', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('17338', 'MEMO BANK', '8 RUE DU FBG POISSONNIERE', 'PARIS', '75010', 'FR', '', 'Etablissement de crédit', ''),
+        ('16233', 'Mercedes-Benz bank AG', '14 place claudel', 'Montigny le bretonneux', '78180', 'FR', '', 'Etablissement de crédit', ''),
+        ('24599', 'Milleis Banque', '32 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('19973', 'Mirabaud & Cie Europe SA', '13 AVENUE HOCHE', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18529', 'Mizuho bank ltd Paris branch', '40 RUE WASHINGTON', 'PARIS CEDEX 08', '75408', 'FR', '', 'Etablissement de crédit', ''),
+        ('16989', 'Mobilis banque', '64 BOULEVARD DE CAMBRAI', 'ROUBAIX', '59100', 'FR', '', 'Etablissement de crédit', ''),
+        ('14690', 'Monabanq', '61 AVENUE HALLEY', 'VILLENEUVE D ASCQ', '59650', 'FR', '', 'Etablissement de crédit', ''),
+        ('41249', 'MUFG Bank Ltd', '18 rue du Quatre Septembre', 'PARIS', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('42799', 'My Money Bank', '20 AV ANDRE PROTHIN', 'PARIS LA DEFENSE CEDEX', '92063', 'FR', '', 'Etablissement de crédit', ''),
+        ('17549', 'Naticredibail', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
+        ('14139', 'National bank of Pakistan', '25 RUE JEAN GIRAUDOUX', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('30007', 'Natixis', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', 'NATXFRPP', 'Etablissement de crédit', ''),
+        ('16278', 'Natixis Asset Management Finance', '59 AVENUE PIERRE MENDES FRANCE', 'PARIS', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('11470', 'Natixis Coficine', '6 RUE DE L AMIRAL HAMELIN', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('15930', 'NATIXIS PAYMENT SOLUTIONS', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
+        ('18919', 'NATIXIS WEALTH MANAGEMENT', '115 RUE MONTMARTRE', 'PARIS', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('23133', 'NATWEST MARKETS N.V.', '32 rue de Monceau', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('41639', 'NBK France SA', '90 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('45850', 'Oddo BHF SCA', '12 BOULEVARD DE LA MADELEINE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('12869', 'ONEY BANK', '40 AVENUE DE FLANDRE', 'CROIX CEDEX', '59964', 'FR', '', 'Etablissement de crédit', ''),
+        ('17839', 'Opel Bank', '2 BOULEVARD DE L EUROPE', 'Poissy', '78300', 'FR', '', 'Etablissement de crédit', ''),
+        ('18370', 'ORANGE BANK', '67 RUE ROBESPIERRE', 'MONTREUIL', '93100', 'FR', '', 'Etablissement de crédit', ''),
+        ('27589', 'Oudart S.A.', '10 A RUE DE LA PAIX', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('21349', 'Parilease', '41 AVENUE DE L OPERA', 'PARIS 02', '75002', 'FR', '', 'Autre institution', ''),
+        ('17288', 'PICTET & CIE EUROPE S.A. Monaco', 'Villa Miraflores avenue Saint-Michel 02', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('15068', 'Pictet & Cie Europe SA', '34 AVENUE DE MESSINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14749', 'PSA BANQUE FRANCE', '2 BOULEVARD DE L EUROPE', 'POISSY Cedex', '78307', 'FR', '', 'Etablissement de crédit', ''),
+        ('17919', 'Qatar national bank', '65 AVENUE D IENA', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
+        ('43789', 'Quilvest banque privee', '243 BOULEVARD SAINT GERMAIN', 'PARIS 07', '75007', 'FR', '', 'Etablissement de crédit', ''),
+        ('15298', 'RBC Investor services bank France SA', '105 RUE REAUMUR', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
+        ('11188', 'RCI Banque', '15 RUE D UZES', 'PARIS', '75002', 'FR', 'RCIEFR22', 'Etablissement de crédit', ''),
+        ('28233', 'REVOLUT PAYMENTS UAB', '3 RUE DE STOCKHOLM', 'PARIS', '75008', 'FR', '', 'Autre institution', ''),
+        ('27033', 'Riverbank S.A.', '9 rue Christophe Colomb', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13369', 'Rothschild Martin Maurel', '29 AVENUE DE MESSINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14478', 'ROTHSCHILD & CO WEALTH MANAGEMENT MONACO', '11 BOULEVARD DES MOULINS', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('12098', 'SOCIETE DE BANQUE MONACO', '27 avenue de la Costa', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('16788', 'Santander Consumer Banque', '26 QUAI MICHELET', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Etablissement de crédit', ''),
+        ('28533', 'Solarisbank AG', '7 RUE MEYERBEER', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('16588', 'SFIL', '1-3 RUE DU PASSEUR DE BOULOGNE', 'ISSY LES MOULINEAUX CEDEX 9', '92861', 'FR', '', 'Etablissement de crédit', ''),
+        ('43629', 'Societe anonyme de credit a l industrie francaise CALIF', '189 RUE D AUBERVILLIERS', 'PARIS CEDEX 18', '75886', 'FR', '', 'Etablissement de crédit', ''),
+        ('30003', 'Societe generale', '189 RUE D AUBERVILLIERS', 'PARIS CEDEX 18', '75886', 'FR', 'SOGEFRPP', 'Etablissement de crédit', ''),
+        ('17060', 'SOCIETE GENERALE Factoring', '3 RUE FRANCIS DE PRESSENSE', 'LA PLAINE ST DENIS CEDEX', '93577', 'FR', '', 'Etablissement de crédit', ''),
+        ('13368', 'Societe generale private banking Monaco', '11 AVENUE DE GRANDE BRETAGNE', 'MONACO', '98007', 'MC', '', 'Etablissement de crédit', ''),
+        ('15968', 'Societe Generale SCF', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
+        ('16228', 'Societe generale SFH', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
+        ('30077', 'Societe marseillaise de credit', '75 RUE PARADIS', 'MARSEILLE 06', '13006', 'FR', '', 'Etablissement de crédit', ''),
+        ('12280', 'Socram banque', '2 RUE DU 24 FEVRIER', 'NIORT CEDEX 9', '79092', 'FR', '', 'Etablissement de crédit', ''),
+        ('19460', 'Sofax banque', '2 PLACE JEAN MILLIER', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
+        ('19259', 'Sogefimur', '29 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('12438', 'SOFIAP', '7 RUE DE LA PIERRE LEVEE', 'PARIS 11', '75011', 'FR', '', 'Autre institution', ''),
+        ('21570', 'Societe financiere de la NEF', '8 AVENUE DES CANUTS', 'VAULX EN VELIN', '69120', 'FR', '', 'Etablissement de crédit', ''),
+        ('15250', 'SMBC Bank International plc', '1-3-5 RUE PAUL CEZANNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13833', 'Stifel Europe Bank AG', '123 RUE DE BERRI', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('14568', 'Svenska handelsbanken AB', '7 RUE DROUOT', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('17328', 'SWAN', '95 AV DU PRESIDENT WILSON', 'MONTREUIL', '93100', 'FR', '', 'Autre institution', ''),
+        ('11238', 'SwissLife banque privee', '7 PLACE VENDOME', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('13733', 'The bank of New York Mellon SA/NV', '7 RUE SCRIBE', 'PARIS', '75109', 'FR', '', 'Etablissement de crédit', ''),
+        ('16618', 'The Export-Import Bank of China', '62 rue de Courcelles', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('15258', 'Bank of Ireland', '20 avenue Franklin Roosevelt', 'PARIS', '75108', 'FR', '', 'Etablissement de crédit', ''),
+        ('13878', 'Toyota kreditbank GmbH', '36 BOULEVARD DE LA REPUBLIQUE', 'VAUCRESSON', '92420', 'FR', '', 'Etablissement de crédit', ''),
+        ('16798', 'Treezor SAS', '94 RUE DE VILLIERS', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Autre institution', ''),
+        ('43849', 'Tunisian foreign bank', '19 RUE DES PYRAMIDES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
+        ('30758', 'UBS France S.A.', '69 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'UBSWFRPP', 'Etablissement de crédit', ''),
+        ('11999', 'UBS Monaco s.a.', '2 avenue de Grande Bretagne', 'MONACO CEDEX', '98007', 'MC', '', 'Etablissement de crédit', ''),
+        ('24333', 'UBS Europe SE', '69 Boulevard Haussmann', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('11998', 'Unicredit bank AG', '117 avenue des Champs Elysees', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('13528', 'Unicredit SpA', '117 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
+        ('18280', 'Unifergie', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
+        ('16648', 'UNION BANCAIRE PRIVEE UBP SA Monaco', '11 bld des Moulins', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
+        ('43899', 'Union de banques arabes et francaises UBAF', '2 AVENUE GAMBETTA', 'PARIS LA DEFENSE CEDEX', '92066', 'FR', '', 'Etablissement de crédit', ''),
+        ('19570', 'Union financiere de France banque', '32 AVENUE D IENA', 'PARIS CEDEX 16', '75783', 'FR', '', 'Etablissement de crédit', ''),
+        ('15128', 'Volkswagen bank GmbH', 'PARC D AFFAIRES SILIC', 'VILLEPINTE', '93420', 'FR', '', 'Etablissement de crédit', ''),
+        ('14633', 'Western union international bank GmbH', '5-6 PLACE DE L IRIS', 'LA DEFENSE Cedex', '92095', 'FR', '', 'Etablissement de crédit', ''),
+        ('16488', 'YOUNITED', '21 RUE DE CHATEAUDUN', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
+        ('12558', 'VFS Finance France', 'TOUR ATLANTIQUE 1 PLACE DE LA PYRAMIDE', 'PARIS', '92911', 'FR', '', 'Autre institution', ''),
+        ('16528', 'XPOLLENS', 'RUE RAYMOND LOSSERAND', 'PARIS 14', '75014', 'FR', '', 'Autre institution', ''),
+        ('17018', 'YAMAHA MOTOR FINANCE FRANCE', '5 AVENUE DU FIEF', 'CERGY-PONTOISE CEDEX', '95078', 'FR', '', 'Autre institution', ''),
+        ('19940', 'BPCE ENERGECO', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Autre institution', ''),
+        ('19190', 'BPCE LEASE REUNION', '32 BOULEVARD DU CHAUDRON', 'SAINT DENIS MESSAG CEDEX 9', '97408', 'FR', '', 'Autre institution', ''),
+        ('18359', 'Bpifrance', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Etablissement de crédit', ''),
+        ('15468', 'Scania finance France', 'ZONE INDUSTRIELLE D ECOUFLANT', 'ANGERS CEDEX 01', '49009', 'FR', '', 'Autre institution', ''),
+        ('18230', 'SOFIPROTEOL', '11 RUE DE MONCEAU', 'PARIS', '75008', 'FR', '', 'Autre institution', ''),
+        ('17439', 'SOFIDER', '3 RUE LABOURDONNAIS', 'SAINT-DENIS CEDEX', '97477', 'FR', '', 'Etablissement de crédit', ''),
+        ('60220', 'Caisse de developpement de la Corse', '6 AVENUE DE PARIS', 'AJACCIO CEDEX 01', '20176', 'FR', '', 'Autre institution', ''),
+        ('11190', 'Caisse de garantie du logement locatif social', '10 avenue Ledru-Rollin', 'PARIS CEDEX 12', '75579', 'FR', '', 'Autre institution', ''),
     ]
     c.executemany("""INSERT OR IGNORE INTO banks
-        (code,name,address,city,postal_code,country,bic,type,regafi_url,notes)
-        VALUES (?,?,?,?,?,?,?,?,?,?)""", banks)
+        (code,name,address,city,postal_code,country,bic,type,notes)
+        VALUES (?,?,?,?,?,?,?,?,?)""", banks)
     conn.commit()
     conn.close()
+
 
 def seed_iban_countries():
     """Seed IBAN country structures from BCEE document + ISO standard."""
@@ -1223,10 +1562,11 @@ with tab1:
 # TAB 2 — OSINT ANALYSIS
 # ══════════════════════════════════════════════════════════════════
 with tab2:
-    st.markdown("## Analyse OSINT & Due Diligence")
+    st.markdown("## Screening OSINT & Due Diligence")
     st.markdown("""<div class='info-box'>
-    Pipeline automatisé : OpenSanctions → web multi-requêtes (fraude, sanctions, litiges, réputation) →
-    scraping → analyse IA Claude → score de risque + rapport PDF exportable.
+    <b>Moteur 100% gratuit, aucune clé API requise.</b> Lance un screening complet sur Internet :
+    presse, réseaux sociaux, Trustpilot, Infogreffe, BODACC, signalements arnaques, sanctions, litiges judiciaires.
+    Génère automatiquement un rapport PDF si des risques sont détectés, ou indique RAS.
     </div>""", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([3,1,1])
@@ -1236,197 +1576,246 @@ with tab2:
         entity_type = st.selectbox("Type", ["Entreprise","Personne physique","Groupe bancaire","Autre"])
     with col3:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        launch_btn = st.button("▶ LANCER L'ANALYSE", key="btn_osint")
+        launch_btn = st.button("▶ LANCER LE SCREENING", key="btn_osint")
 
-    with st.expander("🔗 Options avancées"):
+    with st.expander("⚙️ Options avancées"):
         c1, c2 = st.columns(2)
         with c1:
             linked_iban = st.text_input("IBAN lié (optionnel)", key="linked_iban")
             add_to_watch = st.checkbox("Ajouter à la liste de surveillance après analyse")
         with c2:
-            extra_context = st.text_area("Contexte additionnel (pays, secteur, notes…)", height=80, key="extra_ctx")
+            extra_context = st.text_area("Contexte additionnel (pays, secteur, notes...)", height=80, key="extra_ctx")
+            groq_key_tab = st.text_input("Cle Groq (optionnel, booste l analyse)", type="password",
+                                          placeholder="gsk_... — gratuit sur console.groq.com", key="groq_tab")
 
     if launch_btn and entity_input:
-        if not api_key:
-            st.markdown("<div class='danger-box'>❌ Clé API Anthropic requise. Renseignez-la dans la barre latérale.</div>", unsafe_allow_html=True)
-        else:
-            prog  = st.progress(0)
-            stat  = st.empty()
-            all_results, scraped = [], []
+        prog  = st.progress(0)
+        stat  = st.empty()
+        all_results, scraped = [], []
 
-            # Step 1 — OpenSanctions
-            stat.markdown("🔎 **[1/4]** Interrogation OpenSanctions…")
-            os_result = check_opensanctions(entity_input)
-            prog.progress(10)
+        # ── STEP 1 — OpenSanctions (listes sanctions int.) ────────────
+        stat.markdown("🔎 **[1/6]** Listes de sanctions internationales (OpenSanctions)...")
+        os_result = check_opensanctions(entity_input)
+        prog.progress(8)
 
-            # Step 2 — Multi-query web search
-            queries = [
-                f'"{entity_input}" fraude arnaque escroquerie',
-                f'"{entity_input}" condamné tribunal jugement peine',
-                f'"{entity_input}" sanctions AMF ACPR autorité',
-                f'"{entity_input}" liquidation judiciaire redressement faillite',
-                f'"{entity_input}" blanchiment financement terrorisme',
-                f'"{entity_input}" plainte client avis négatif',
-                f'site:infogreffe.fr "{entity_input}"',
-                f'site:bodacc.fr "{entity_input}"',
-                f'"{entity_input}" Trustpilot avis',
-                f'"{entity_input}" scandal corruption fraud',
-            ]
-            stat.markdown(f"🌐 **[2/4]** Recherche web ({len(queries)} requêtes ciblées)…")
-            for i, q in enumerate(queries):
-                r = search_web(q, num=5)
-                all_results.extend(r)
-                prog.progress(10 + int((i+1)/len(queries)*40))
-                time.sleep(0.15)
+        # ── STEP 2 — Multi-source web search ──────────────────────────
+        # 20 requetes ciblées couvrant toutes les sources demandées
+        queries = [
+            # Presse et médias
+            f'"{entity_input}" fraude arnaque escroquerie',
+            f'"{entity_input}" condamne tribunal jugement peine',
+            f'"{entity_input}" sanctions AMF ACPR Banque de France',
+            f'"{entity_input}" liquidation judiciaire redressement faillite',
+            f'"{entity_input}" blanchiment corruption pot-de-vin',
+            f'"{entity_input}" mise en examen perquisition',
+            f'"{entity_input}" fraud corruption scandal',
+            # Réseaux sociaux
+            f'site:twitter.com "{entity_input}" arnaque fraude',
+            f'site:linkedin.com "{entity_input}"',
+            f'site:facebook.com "{entity_input}" arnaque',
+            # Avis et notations
+            f'site:trustpilot.com "{entity_input}"',
+            f'site:avis-verifies.com "{entity_input}"',
+            f'"{entity_input}" avis client plainte signalement',
+            # Registres légaux et judiciaires
+            f'site:infogreffe.fr "{entity_input}"',
+            f'site:bodacc.fr "{entity_input}"',
+            f'site:tribunal-commerce.fr "{entity_input}"',
+            f'"{entity_input}" site:justice.fr',
+            # Signalements arnaques
+            f'"{entity_input}" site:signal-arnaques.com',
+            f'"{entity_input}" site:cybermalveillance.gouv.fr',
+            f'"{entity_input}" escroquerie signale arnaqueur victime',
+        ]
 
-            # Step 3 — Scraping
-            stat.markdown("📄 **[3/4]** Lecture des pages pertinentes…")
-            seen = set()
-            for r in all_results[:20]:
-                dom = urlparse(r.get("url","")).netloc
-                if dom and dom not in seen and len(scraped) < 5:
-                    seen.add(dom)
-                    t = scrape_page(r["url"])
-                    if t:
-                        scraped.append(t)
-            prog.progress(65)
+        stat.markdown(f"🌐 **[2/6]** Recherche web — {len(queries)} requêtes (presse, réseaux, justice, avis, arnaques)...")
+        for i, q in enumerate(queries):
+            r = search_web(q, num=6)
+            all_results.extend(r)
+            prog.progress(8 + int((i+1)/len(queries)*35))
+            time.sleep(0.1)
 
-            # IBAN
-            iban_data, bank_data = {}, {}
-            if linked_iban:
-                iban_data = validate_iban(linked_iban)
-                if iban_data.get("bank_code"):
-                    b = db_get_bank_by_code(iban_data["bank_code"])
-                    if b:
-                        bank_data = b
+        # Deduplicate by URL
+        seen_urls = set()
+        unique_results = []
+        for r in all_results:
+            u = r.get("url","")
+            if u and u not in seen_urls:
+                seen_urls.add(u)
+                unique_results.append(r)
+        all_results = unique_results
 
-            # Step 4 — Analysis (local engine + optional LLM boost)
-            moteur_label = "🔍 Moteur local (mots-clés)"
-            analysis = None
+        # ── STEP 3 — Deep scraping of top results ────────────────────
+        stat.markdown("📄 **[3/6]** Lecture approfondie des pages (presse, Trustpilot, Infogreffe, BODACC)...")
+        priority_domains = ["trustpilot","infogreffe","bodacc","signal-arnaques","cybermalveillance",
+                            "lemonde","lefigaro","bfmtv","liberation","latribune","lesechos",
+                            "amf-france","acpr","justice.fr","tribunal"]
+        seen_domains = set()
+        # Prioritize important domains first
+        sorted_results = sorted(all_results,
+            key=lambda r: 1 if any(d in r.get("url","") for d in priority_domains) else 0,
+            reverse=True)
+        for r in sorted_results[:25]:
+            dom = urlparse(r.get("url","")).netloc.replace("www.","")
+            if dom and dom not in seen_domains and len(scraped) < 10:
+                seen_domains.add(dom)
+                txt = scrape_page(r["url"], max_chars=2500)
+                if txt and len(txt) > 100:
+                    scraped.append(txt)
+        prog.progress(60)
 
-            # Try Ollama first if no Groq key (fully local)
-            if not api_key:
-                stat.markdown("🔍 **[4/4]** Analyse locale (mots-clés pondérés)…")
-                try:
-                    ollama_result = analyze_with_ollama(entity_input, all_results, scraped)
-                    if ollama_result:
-                        analysis = ollama_result
-                        moteur_label = "🦙 Ollama local (llama3.2)"
-                except:
-                    pass
+        # ── STEP 4 — IBAN lookup ───────────────────────────────────────
+        iban_data, bank_data = {}, {}
+        if linked_iban:
+            iban_data = validate_iban(linked_iban)
+            if iban_data.get("bank_code"):
+                b = db_get_bank_by_code(iban_data["bank_code"])
+                if b:
+                    bank_data = b
 
-            # Try Groq if key provided
-            if not analysis and api_key:
-                stat.markdown("⚡ **[4/4]** Analyse Groq LLM (llama-3.1-8b)…")
-                try:
-                    groq_result = analyze_with_groq(entity_input, all_results, scraped, api_key)
-                    if groq_result:
+        # ── STEP 5 — Local analysis engine ───────────────────────────
+        stat.markdown("🔍 **[4/6]** Analyse des signaux de risque (moteur local)...")
+        analysis = analyze_local(entity_input, all_results, scraped, os_result)
+
+        # Optional: boost with Groq LLM if key provided
+        groq_k = groq_key_tab or (api_key if api_key else None)
+        if groq_k and analysis.get("confiance_analyse") == "FAIBLE":
+            stat.markdown("⚡ **[5/6]** Analyse enrichie avec LLM (Groq)...")
+            try:
+                groq_result = analyze_with_groq(entity_input, all_results, scraped, groq_k)
+                if groq_result:
+                    # Merge: keep highest score
+                    if groq_result.get("score_risque",0) > analysis.get("score_risque",0):
+                        groq_result["scores_categories"] = analysis.get("scores_categories",{})
+                        groq_result["_moteur_label"] = "⚡ Groq llama-3.1 + moteur local"
                         analysis = groq_result
-                        moteur_label = "⚡ Groq — llama-3.1-8b"
-                except:
-                    pass
+            except:
+                pass
+        prog.progress(85)
 
-            # Always fallback to local engine
-            if not analysis:
-                stat.markdown("🔍 **[4/4]** Analyse locale (scoring par mots-clés)…")
-                analysis = analyze_local(entity_input, all_results, scraped, os_result)
-                moteur_label = "🔍 Moteur local (mots-clés pondérés — gratuit)"
+        # ── STEP 6 — Save & display ──────────────────────────────────
+        stat.markdown("💾 **[6/6]** Enregistrement et génération du rapport...")
+        db_save_report(entity_input, entity_type,
+                       linked_iban or "",
+                       analysis.get("score_risque",0),
+                       analysis.get("niveau_risque",""),
+                       analysis.get("recommandation",""),
+                       analysis.get("resume_executif",""),
+                       json.dumps(analysis, ensure_ascii=False))
 
-            prog.progress(95)
-            analysis["_moteur_label"] = moteur_label
+        if add_to_watch:
+            db_add_watchlist(entity_input, entity_type,
+                             "Screening OSINT automatique",
+                             analysis.get("niveau_risque",""),
+                             "Auto")
 
-            # Save to DB
-            db_save_report(entity_input, entity_type,
-                           linked_iban or "",
-                           analysis.get("score_risque",0),
-                           analysis.get("niveau_risque",""),
-                           analysis.get("recommandation",""),
-                           analysis.get("resume_executif",""),
-                           json.dumps(analysis, ensure_ascii=False))
+        prog.progress(100)
+        stat.empty()
 
-            if add_to_watch:
-                db_add_watchlist(entity_input, entity_type,
-                                 "Ajouté depuis analyse OSINT",
-                                 analysis.get("niveau_risque",""),
-                                 "Analyste")
+        # ── DISPLAY ─────────────────────────────────────────────────
+        st.markdown("---")
 
-            prog.progress(100)
-            stat.empty()
+        score   = analysis.get("score_risque", 0)
+        niveau  = analysis.get("niveau_risque", "FAIBLE")
+        reco    = analysis.get("recommandation", "ACCEPTER")
+        neg_news = analysis.get("negative_news", [])
+        sanctions_found = analysis.get("sanctions",{}).get("trouve", False)
+        litiges_found   = analysis.get("litiges_judiciaires",{}).get("trouve", False)
+        has_risk = (score >= 20 or sanctions_found or litiges_found or len(neg_news) >= 2
+                    or os_result.get("found") or niveau in ("ELEVE","CRITIQUE"))
 
-            # ── Display results ────────────────────────────────────────
-            st.markdown("---")
-            niveau = analysis.get("niveau_risque","N/A")
-            score  = analysis.get("score_risque","N/A")
-            reco   = analysis.get("recommandation","N/A")
-            conf   = analysis.get("confiance_analyse","N/A")
+        moteur_lbl = analysis.get("_moteur_label","🔍 Moteur local")
+        scores_cat = analysis.get("scores_categories",{})
+        cat_str = "  ·  ".join(f"{k}: {v}" for k,v in scores_cat.items() if v > 0)
 
+        st.markdown(f"""<div style='background:rgba(0,212,255,0.04);border:1px solid #1e2535;
+        border-radius:4px;padding:8px 14px;margin:4px 0 10px;font-size:0.75rem;'>
+        <span style='color:#5a6a7a;'>Moteur :</span>
+        <span style='color:#00d4ff;font-family:IBM Plex Mono,monospace;'>{moteur_lbl}</span>
+        {"  <span style='color:#5a6a7a;'>|  Signaux : "+cat_str+"</span>" if cat_str else ""}
+        &nbsp;·&nbsp;<span style='color:#5a6a7a;'>{len(all_results)} sources · {len(scraped)} pages lues</span>
+        </div>""", unsafe_allow_html=True)
+
+        # ── RAS OR RISK ───────────────────────────────────────────────
+        if not has_risk:
+            st.markdown(f"""
+            <div style='background:rgba(0,255,136,0.07);border:2px solid #00ff88;border-radius:8px;
+            padding:24px 28px;margin:12px 0;text-align:center;'>
+              <div style='font-size:2rem;'>✅</div>
+              <div style='font-family:IBM Plex Mono,monospace;font-size:1.2rem;color:#00ff88;margin:8px 0;'>
+                RAS — AUCUN RISQUE DÉTECTÉ
+              </div>
+              <div style='color:#c8d6e5;font-size:0.9rem;'>{entity_input}</div>
+              <div style='color:#5a6a7a;font-size:0.8rem;margin-top:8px;'>
+                Score : {score}/100 · {len(all_results)} sources analysées · Aucun signal négatif significatif
+              </div>
+            </div>""", unsafe_allow_html=True)
+            st.markdown(f"<div class='ok-box'>{analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
+
+        else:
+            # Risk detected — show full dashboard
             badge_map = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}
             bmap = badge_map.get(niveau,"badge-medium")
+            rc_col = {"ACCEPTER":"#00ff88","VIGILANCE_RENFORCEE":"#ffcc00","REFUSER":"#ff3366"}.get(reco,"#5a6a7a")
+            sc_col = "#ff3366" if os_result.get("found") or sanctions_found else "#00ff88"
 
-            c1,c2,c3,c4,c5 = st.columns(5)
+            c1,c2,c3,c4 = st.columns(4)
             with c1:
                 st.markdown(f"<div class='metric-card'><div class='label'>Score risque</div><div class='value'>{score}<span style='font-size:0.8rem;color:#5a6a7a;'>/100</span></div></div>", unsafe_allow_html=True)
             with c2:
                 st.markdown(f"<div class='metric-card'><div class='label'>Niveau</div><div class='value' style='font-size:1rem;margin-top:8px;'><span class='{bmap}'>{niveau}</span></div></div>", unsafe_allow_html=True)
             with c3:
-                sc = "✓ OUI" if analysis.get("sanctions",{}).get("trouve") else "✗ NON"
-                sc_col = "#ff3366" if analysis.get("sanctions",{}).get("trouve") else "#00ff88"
-                st.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:1rem;color:{sc_col};'>{sc}</div><div class='sub'>OS: {os_result.get('count',0)} hit(s)</div></div>", unsafe_allow_html=True)
+                sc_txt = f"SANCTIONS : {os_result.get('count',0)} hit(s)" if os_result.get("found") else ("⚠ Mots-clés" if sanctions_found else "✅ Aucune sanction")
+                st.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:0.8rem;color:{sc_col};'>{sc_txt}</div></div>", unsafe_allow_html=True)
             with c4:
-                rc_col = {"ACCEPTER":"#00ff88","VIGILANCE_RENFORCEE":"#ffcc00","REFUSER":"#ff3366"}.get(reco,"#5a6a7a")
-                st.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.8rem;color:{rc_col};'>{reco}</div></div>", unsafe_allow_html=True)
-            with c5:
-                st.markdown(f"<div class='metric-card'><div class='label'>Sources web</div><div class='value' style='font-size:1rem;'>{len(all_results)}</div><div class='sub'>{len(scraped)} pages lues</div></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.75rem;color:{rc_col};'>{reco}</div></div>", unsafe_allow_html=True)
 
-            moteur_lbl = analysis.get("_moteur_label","🔍 Moteur local")
-            # Show scores breakdown
-            scores_cat = analysis.get("scores_categories",{})
-            cat_display = " · ".join(f"{k}: {v}" for k,v in scores_cat.items()) if scores_cat else ""
-            st.markdown(f"""
-            <div style='background:rgba(0,212,255,0.04);border:1px solid #1e2535;border-radius:4px;padding:8px 14px;margin:6px 0;font-size:0.75rem;'>
-              <span style='color:#5a6a7a;'>Moteur d analyse :</span>
-              <span style='color:#00d4ff;font-family:IBM Plex Mono,monospace;'>{moteur_lbl}</span>
-              {"<br><span style='color:#5a6a7a;'>Scores : "+cat_display+"</span>" if cat_display else ""}
-            </div>""", unsafe_allow_html=True)
-            st.markdown(f"<div class='info-box'><b>Résumé :</b> {analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='warn-box'><b>⚠ Résumé :</b> {analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
 
             cl, cr = st.columns(2)
             with cl:
-                st.markdown("#### 📰 Actualités négatives")
-                for n in analysis.get("negative_news",[]):
-                    g = n.get("gravite","").lower()
-                    cls = {"faible":"ok-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"info-box")
-                    st.markdown(f"<div class='{cls}'><b>{n.get('titre','')}</b><br><small>{n.get('source','')} · {n.get('date','')} · {n.get('nature','')}</small></div>", unsafe_allow_html=True)
-                if not analysis.get("negative_news"):
-                    st.markdown("<div class='ok-box'>✅ Aucune actualité négative détectée</div>", unsafe_allow_html=True)
+                st.markdown("#### 📰 Signaux négatifs détectés")
+                if neg_news:
+                    for n in neg_news[:8]:
+                        g = n.get("gravite","").lower()
+                        cls = {"faible":"info-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"warn-box")
+                        url = n.get("url","")
+                        link = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.75rem;'>→ Source</a>" if url else ""
+                        kws = ", ".join(n.get("mots_cles",[])[:3])
+                        st.markdown(f"""<div class='{cls}'>
+                        <b>{n.get('titre','')[:90]}</b>{link}<br>
+                        <small>{n.get('source','')} · {n.get('nature','')} · <span style='color:#ffcc00;'>mots-clés: {kws}</span></small>
+                        </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("<div class='info-box'>Titres sans signal fort mais score > seuil.</div>", unsafe_allow_html=True)
 
-                st.markdown("#### ⚖️ Litiges & procédures")
+                st.markdown("#### ⚖️ Litiges & procédures judiciaires")
                 lit = analysis.get("litiges_judiciaires",{})
                 if lit.get("trouve"):
                     st.markdown(f"<div class='danger-box'>⚠️ {lit.get('details','')}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown("<div class='ok-box'>✅ Aucun litige identifié</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='ok-box'>Aucun litige identifié</div>", unsafe_allow_html=True)
 
             with cr:
-                st.markdown("#### 🚨 Sanctions")
+                st.markdown("#### 🚨 Sanctions & listes internationales")
                 if os_result.get("found"):
                     st.markdown(f"<div class='danger-box'>🔴 <b>{os_result['count']}</b> entrée(s) OpenSanctions</div>", unsafe_allow_html=True)
                     for r in os_result.get("results",[])[:3]:
                         st.markdown(f"<div class='result-row'><b>{r.get('caption','')}</b> · {', '.join(r.get('datasets',[]))}</div>", unsafe_allow_html=True)
+                elif sanctions_found:
+                    st.markdown(f"<div class='warn-box'>⚠️ {analysis.get('sanctions',{}).get('details','')}</div>", unsafe_allow_html=True)
                 else:
-                    st.markdown("<div class='ok-box'>✅ Aucune sanction internationale</div>", unsafe_allow_html=True)
+                    st.markdown("<div class='ok-box'>Absent des listes de sanctions</div>", unsafe_allow_html=True)
 
                 st.markdown("#### 👤 PEP & Réputation")
                 pep = analysis.get("pep_exposure",{})
                 if pep.get("trouve"):
                     st.markdown(f"<div class='warn-box'>⚠️ {pep.get('details','')}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='ok-box'>✅ Aucune exposition PEP</div>", unsafe_allow_html=True)
                 rep = analysis.get("reputation_notations","")
                 if rep:
-                    st.markdown(f"<div class='info-box'>⭐ {rep}</div>", unsafe_allow_html=True)
+                    cls = "warn-box" if "dégradée" in rep else "info-box"
+                    st.markdown(f"<div class='{cls}'>⭐ {rep}</div>", unsafe_allow_html=True)
 
-            # Factors
             cf1, cf2 = st.columns(2)
             with cf1:
                 st.markdown("#### 🔺 Facteurs aggravants")
@@ -1437,27 +1826,58 @@ with tab2:
                 for f in analysis.get("facteurs_attenuants",[]):
                     st.markdown(f"<div class='ok-box'>• {f}</div>", unsafe_allow_html=True)
 
-            with st.expander(f"📋 Résultats bruts — {len(all_results)} sources collectées"):
-                for r in all_results[:30]:
-                    st.markdown(f"""
-                    <div class='result-row'>
-                      <a href='{r.get('url','')}' target='_blank' style='color:#00d4ff;text-decoration:none;'><b>{r.get('title','')}</b></a><br>
-                      <small style='color:#5a6a7a;'>{r.get('url','')[:80]}</small><br>
-                      <small>{r.get('snippet','')[:150]}</small>
+            # All raw results
+            with st.expander(f"📋 Sources brutes ({len(all_results)} résultats)"):
+                for r in all_results[:40]:
+                    dom = urlparse(r.get("url","")).netloc
+                    is_risk = any(kw in (r.get("title","")+r.get("snippet","")).lower()
+                                  for kw in ["fraude","arnaque","condamn","sanction","escroquerie","fraud","scam"])
+                    border = "border-left:3px solid #ff3366;" if is_risk else ""
+                    st.markdown(f"""<div class='result-row' style='{border}'>
+                    <a href='{r.get("url","")}' target='_blank' style='color:#00d4ff;text-decoration:none;'><b>{r.get("title","")[:100]}</b></a><br>
+                    <small style='color:#5a6a7a;'>{dom}</small>&nbsp;
+                    <small>{r.get("snippet","")[:140]}</small>
                     </div>""", unsafe_allow_html=True)
 
-            # PDF export
-            st.markdown("---")
-            if st.button("⬇ GÉNÉRER RAPPORT PDF", key="gen_pdf"):
-                with st.spinner("Génération du rapport PDF…"):
+        # ── PDF EXPORT ───────────────────────────────────────────────
+        st.markdown("---")
+        if has_risk:
+            st.markdown("""<div class='warn-box'>
+            ⚠️ Des signaux ont été détectés. Générez le rapport PDF pour une analyse complète.
+            </div>""", unsafe_allow_html=True)
+            col_pdf1, col_pdf2 = st.columns([2,1])
+            with col_pdf1:
+                if st.button("⬇ GÉNÉRER RAPPORT PDF", key="gen_pdf"):
+                    with st.spinner("Génération du rapport PDF..."):
+                        try:
+                            pdf = generate_pdf_report(entity_input, iban_data, bank_data, os_result, analysis)
+                            fname = f"FinShield_{entity_input.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                            st.download_button("📥 Télécharger le rapport", data=pdf,
+                                               file_name=fname, mime="application/pdf", key="dl_pdf")
+                            st.markdown("<div class='ok-box'>✅ Rapport PDF prêt au téléchargement.</div>", unsafe_allow_html=True)
+                        except Exception as e:
+                            st.error(f"Erreur PDF : {e}")
+            with col_pdf2:
+                st.markdown(f"""<div class='metric-card'>
+                <div class='label'>Contenu du rapport</div>
+                <div class='sub' style='margin-top:6px;'>
+                Score · Niveau · Sanctions<br>
+                {len(neg_news)} actualité(s) négative(s)<br>
+                Litiges · PEP · Réputation<br>
+                Facteurs aggravants/atténuants<br>
+                IBAN + banque (si renseigné)
+                </div></div>""", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='ok-box'>✅ Aucun risque détecté — rapport PDF non nécessaire.</div>", unsafe_allow_html=True)
+            if st.button("⬇ Générer quand même un rapport PDF vierge", key="gen_pdf_ras"):
+                with st.spinner("Génération..."):
                     try:
                         pdf = generate_pdf_report(entity_input, iban_data, bank_data, os_result, analysis)
-                        fname = f"FinShield_{entity_input.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-                        st.download_button("📥 Télécharger le rapport PDF", data=pdf,
-                                           file_name=fname, mime="application/pdf")
-                        st.markdown("<div class='ok-box'>✅ Rapport PDF généré</div>", unsafe_allow_html=True)
+                        fname = f"FinShield_RAS_{entity_input.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                        st.download_button("📥 Télécharger", data=pdf, file_name=fname, mime="application/pdf", key="dl_pdf_ras")
                     except Exception as e:
                         st.error(f"Erreur PDF : {e}")
+
 
 # ══════════════════════════════════════════════════════════════════
 # TAB 3 — BANK SEARCH
