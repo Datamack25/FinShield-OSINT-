@@ -848,102 +848,142 @@ def search_web(query: str, num: int = 8) -> list:
 
 def build_search_queries(entity: str) -> list:
     """
-    Build 50+ targeted queries covering all requested sources:
-    press, social media, legal registries, review platforms, scam databases, sanctions.
-    Each query uses quoted entity name to force exact match.
+    Génère 60+ requêtes couvrant tous les pays / langues :
+    FR, EN, ES, PT, DE, IT, AR, ZH, RU + registres monde entier.
     """
-    e = entity  # keep original for quoted searches
+    e = entity
     queries = []
 
-    # ── PRESSE FRANÇAISE ─────────────────────────────────────────
+    # ── FRANÇAIS ──────────────────────────────────────────────────
     queries += [
         f'"{e}" fraude arnaque escroquerie',
-        f'"{e}" condamné condamnation tribunal correctionnel',
-        f'"{e}" mis en examen garde à vue perquisition',
-        f'"{e}" liquidation judiciaire redressement faillite dépôt de bilan',
-        f'"{e}" blanchiment argent financement terrorisme',
-        f'"{e}" corruption pot-de-vin détournement',
-        f'"{e}" sanction AMF ACPR Banque de France',
-        f'"{e}" mise en demeure interdiction',
+        f'"{e}" condamné condamnation tribunal',
+        f'"{e}" mis en examen perquisition garde à vue',
+        f'"{e}" liquidation judiciaire redressement faillite',
+        f'"{e}" blanchiment financement du terrorisme',
+        f'"{e}" corruption détournement malversation',
+        f'"{e}" sanction AMF ACPR interdiction',
+        f'"{e}" mise en cause plainte dépôt de plainte',
+        f'"{e}" faux usage de faux abus de confiance',
+        f'"{e}" interdit bancaire liste noire',
     ]
-    # ── PRESSE INTERNATIONALE ────────────────────────────────────
+    # ── ANGLAIS ───────────────────────────────────────────────────
     queries += [
         f'"{e}" fraud scam money laundering',
-        f'"{e}" corruption bribery convicted sentenced',
-        f'"{e}" sanctions blacklist OFAC',
-        f'"{e}" criminal charges lawsuit indicted',
+        f'"{e}" corruption bribery convicted sentenced prison',
+        f'"{e}" sanctions blacklist OFAC banned',
+        f'"{e}" criminal charges lawsuit indicted arrested',
+        f'"{e}" fraud warning alert exposed',
+        f'"{e}" Ponzi scheme embezzlement misappropriation',
+        f'"{e}" regulatory action enforcement penalty',
+        f'"{e}" terrorism financing terrorist',
     ]
-    # ── RÉSEAUX SOCIAUX ──────────────────────────────────────────
+    # ── ESPAGNOL ──────────────────────────────────────────────────
     queries += [
-        f'site:twitter.com "{e}" arnaque fraude escroquerie',
-        f'site:twitter.com "{e}" scam fraud warning',
-        f'site:linkedin.com/in "{e}"',
-        f'site:facebook.com "{e}" arnaque plainte',
-        f'site:reddit.com "{e}" scam fraud arnaque',
-        f'site:instagram.com "{e}"',
+        f'"{e}" fraude estafa corrupción condenado',
+        f'"{e}" blanqueo dinero sanción',
+        f'"{e}" detenido arrestado investigado',
     ]
-    # ── AVIS ET NOTATIONS ────────────────────────────────────────
+    # ── PORTUGAIS ─────────────────────────────────────────────────
+    queries += [
+        f'"{e}" fraude golpe corrupção preso condenado',
+        f'"{e}" lavagem dinheiro sanção',
+    ]
+    # ── ALLEMAND ──────────────────────────────────────────────────
+    queries += [
+        f'"{e}" Betrug Korruption verurteilt verhaftet',
+        f'"{e}" Geldwäsche Sanktion Strafe',
+    ]
+    # ── ITALIEN ───────────────────────────────────────────────────
+    queries += [
+        f'"{e}" truffa corruzione condannato arrestato',
+        f'"{e}" riciclaggio sanzione',
+    ]
+    # ── ARABE ─────────────────────────────────────────────────────
+    queries += [
+        f'"{e}" احتيال غسيل أموال فساد',
+        f'"{e}" عقوبات قائمة سوداء',
+    ]
+    # ── RUSSE ─────────────────────────────────────────────────────
+    queries += [
+        f'"{e}" мошенничество коррупция арест осуждён',
+        f'"{e}" санкции отмывание денег',
+    ]
+    # ── RÉSEAUX SOCIAUX ───────────────────────────────────────────
+    queries += [
+        f'site:twitter.com "{e}" arnaque fraud scam warning',
+        f'site:linkedin.com "{e}"',
+        f'site:facebook.com "{e}" arnaque plainte fraude',
+        f'site:reddit.com "{e}" scam fraud arnaque',
+        f'site:instagram.com "{e}" scam arnaque',
+        f'site:youtube.com "{e}" arnaque fraud',
+    ]
+    # ── AVIS & NOTATIONS ──────────────────────────────────────────
     queries += [
         f'site:trustpilot.com "{e}"',
-        f'site:trustpilot.com/review "{e}"',
         f'site:avis-verifies.com "{e}"',
-        f'site:google.com/maps "{e}" avis',
         f'site:glassdoor.com "{e}"',
-        f'"{e}" avis client plainte mauvaise expérience',
-        f'"{e}" note étoile déconseillé',
+        f'"{e}" avis client plainte mauvaise expérience victime',
+        f'"{e}" déconseillé arnaqueur témoignage',
     ]
-    # ── SIGNALEMENTS ARNAQUES ────────────────────────────────────
+    # ── SIGNALEMENTS ARNAQUES ──────────────────────────────────────
     queries += [
         f'site:signal-arnaques.com "{e}"',
         f'site:cybermalveillance.gouv.fr "{e}"',
         f'site:escroqueries.fr "{e}"',
-        f'site:arnaque-signal.fr "{e}"',
-        f'"{e}" site:forum-assurance.com',
-        f'"{e}" arnaque signalé victime témoignage',
-        f'"{e}" liste noire interdit bancaire',
+        f'"{e}" arnaque signalé victime forum',
     ]
-    # ── REGISTRES LÉGAUX FRANÇAIS ────────────────────────────────
+    # ── REGISTRES LÉGAUX MONDE ENTIER ─────────────────────────────
     queries += [
+        # France
         f'site:infogreffe.fr "{e}"',
         f'site:bodacc.fr "{e}"',
+        f'site:pappers.fr "{e}"',
         f'site:societe.com "{e}"',
         f'site:verif.com "{e}"',
-        f'site:pappers.fr "{e}"',
-        f'site:tribunal-commerce.fr "{e}"',
         f'site:legifrance.gouv.fr "{e}"',
-    ]
-    # ── JUSTICE ET PROCÉDURES ────────────────────────────────────
-    queries += [
         f'site:justice.fr "{e}"',
-        f'site:courdecassation.fr "{e}"',
-        f'"{e}" jugement arrêt décision justice',
-        f'"{e}" procès pénal civil commercial',
+        # International
+        f'site:companieshouse.gov.uk "{e}"',
+        f'site:opencorporates.com "{e}"',
+        f'site:sec.gov "{e}"',
+        f'site:pacer.gov "{e}"',
+        f'"{e}" company registry incorporated',
+        f'"{e}" court records judgment filed',
     ]
     # ── SANCTIONS INTERNATIONALES ─────────────────────────────────
     queries += [
         f'site:opensanctions.org "{e}"',
-        f'site:sanctionsmap.eu "{e}"',
         f'site:ofac.treas.gov "{e}"',
-        f'"{e}" EU sanctions OFAC UN blacklist',
-        f'site:acpr.banque-france.fr "{e}"',
+        f'site:sanctionsmap.eu "{e}"',
+        f'site:un.org/sc/suborg/en/sanctions "{e}"',
         f'site:amf-france.org "{e}"',
+        f'site:acpr.banque-france.fr "{e}"',
+        f'"{e}" EU UN OFAC SDN sanctioned blacklisted',
+        f'"{e}" Interpol red notice wanted',
     ]
-    # ── PRESSE SPÉCIALISÉE FINANCE ────────────────────────────────
+    # ── PRESSE MONDIALE ───────────────────────────────────────────
     queries += [
-        f'site:lesechos.fr "{e}"',
-        f'site:latribune.fr "{e}"',
-        f'site:bfmtv.com "{e}"',
-        f'site:capital.fr "{e}"',
         f'site:reuters.com "{e}"',
         f'site:bloomberg.com "{e}"',
+        f'site:ft.com "{e}"',
+        f'site:bbc.com "{e}"',
+        f'site:theguardian.com "{e}"',
+        f'site:lemonde.fr "{e}"',
+        f'site:lesechos.fr "{e}"',
+        f'site:bfmtv.com "{e}"',
+        f'site:latribune.fr "{e}"',
+        f'site:spiegel.de "{e}"',
+        f'site:elpais.com "{e}"',
     ]
 
     return queries
 
+
 def scrape_page(url: str, max_chars=3000) -> str:
     try:
         from bs4 import BeautifulSoup
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         r = requests.get(url, headers=headers, timeout=8, allow_redirects=True)
         soup = BeautifulSoup(r.text, "html.parser")
         for tag in soup(["script","style","nav","footer","header","aside"]):
@@ -952,125 +992,189 @@ def scrape_page(url: str, max_chars=3000) -> str:
     except:
         return ""
 
-# ══════════════════════════════════════════════════════════════════
-# KEYWORD-BASED RISK ENGINE  (100% gratuit, zéro API)
-# ══════════════════════════════════════════════════════════════════
 
-# Chaque catégorie : {mot: poids}  (poids 1–5, 5 = très grave)
+# ══════════════════════════════════════════════════════════════════
+# KEYWORD-BASED RISK ENGINE — multilingue (FR/EN/ES/PT/DE/IT/AR/ZH/RU)
+# ══════════════════════════════════════════════════════════════════
 RISK_KEYWORDS = {
     "sanctions": {
         # FR
         "sanction":5,"sanctionné":5,"sanctions":5,"ofac":5,"gel des avoirs":5,
         "liste noire":5,"blacklist":5,"embargo":4,"liste ue":4,"liste onu":4,
-        "seco":4,"trésor américain":4,"amf sanction":5,"acpr sanction":5,
-        "interdiction bancaire":5,"interdit bancaire":4,
+        "seco":4,"amf sanction":5,"acpr sanction":5,"interdiction bancaire":5,
+        "interdit bancaire":4,"interdiction d exercer":5,
         # EN
-        "sanctioned":5,"blacklisted":5,"ofac list":5,"eu sanctions":4,
-        "un sanctions":4,"asset freeze":5,"travel ban":4,
+        "sanctioned":5,"blacklisted":5,"ofac list":5,"sdn list":5,
+        "eu sanctions":4,"un sanctions":4,"asset freeze":5,"travel ban":4,
+        "debarred":4,"banned":4,"restricted":3,
+        # ES/PT
+        "sancionado":4,"lista negra":4,"embargo":4,"vetado":4,
+        # DE/IT
+        "sanktioniert":4,"schwarze liste":4,"sanzionato":4,
+        # AR
+        "عقوبات":5,"قائمة سوداء":5,"تجميد":4,
+        # RU
+        "санкции":5,"чёрный список":5,"заморозка":4,
     },
     "fraud": {
         # FR
-        "fraude":5,"frauduleux":5,"escroquerie":5,"arnaque":4,"abus de confiance":5,
-        "détournement":5,"malversation":5,"falsification":4,"faux et usage de faux":5,
-        "corruption":5,"corruptions":5,"pot-de-vin":5,"blanchiment":5,
-        "blanchiment d'argent":5,"financement du terrorisme":5,"financement terrorisme":5,
-        "abus de biens sociaux":4,"abus de position dominante":3,"tromperie":3,
-        "publicité mensongère":2,"pratiques commerciales trompeuses":3,
+        "fraude":5,"frauduleux":5,"escroquerie":5,"arnaque":4,
+        "abus de confiance":5,"détournement":5,"malversation":5,
+        "falsification":4,"faux et usage de faux":5,"corruption":5,
+        "pot-de-vin":5,"blanchiment":5,"blanchiment d argent":5,
+        "financement du terrorisme":5,"financement terrorisme":5,
+        "abus de biens sociaux":4,"tromperie":3,"publicité mensongère":2,
+        "pratiques commerciales trompeuses":3,"abus de position dominante":3,
         # EN
-        "fraud":5,"fraudulent":5,"scam":4,"embezzlement":5,"money laundering":5,
-        "bribery":5,"corruption":5,"forgery":4,"misappropriation":5,
-        "terrorist financing":5,"ponzi":5,
+        "fraud":5,"fraudulent":5,"scam":4,"embezzlement":5,
+        "money laundering":5,"bribery":5,"corruption":5,"forgery":4,
+        "misappropriation":5,"terrorist financing":5,"ponzi":5,
+        "racketeering":5,"extortion":4,"counterfeiting":4,
+        # ES
+        "fraude":5,"estafa":5,"corrupción":5,"blanqueo":5,
+        "malversación":5,"soborno":4,"falsificación":4,
+        # PT
+        "fraude":5,"golpe":4,"corrupção":5,"lavagem":5,"suborno":4,
+        # DE
+        "betrug":5,"korruption":5,"geldwäsche":5,"bestechung":4,
+        "veruntreuung":5,"fälschung":4,
+        # IT
+        "truffa":5,"corruzione":5,"riciclaggio":5,"frode":5,
+        "peculato":5,"falsificazione":4,
+        # AR
+        "احتيال":5,"غسيل الأموال":5,"فساد":5,"رشوة":4,"تزوير":4,
+        # RU
+        "мошенничество":5,"коррупция":5,"отмывание":5,
+        "взяточничество":4,"фальсификация":4,
+        # ZH
+        "欺诈":5,"洗钱":5,"腐败":5,"贿赂":4,
     },
     "judicial": {
         # FR
         "condamné":5,"condamnation":5,"mis en examen":4,"garde à vue":3,
         "perquisition":3,"liquidation judiciaire":4,"redressement judiciaire":4,
         "faillite":4,"procédure collective":4,"tribunal correctionnel":4,
-        "tribunal de commerce":3,"arrêt de cour":3,"jugement":3,"plainte":3,
-        "dépôt de bilan":4,"dissolution":3,"peine de prison":5,"incarcéré":5,
-        "inculpé":4,"mise en cause":3,"assigné en justice":3,"procès":3,
-        "appel en justice":3,"arrêté":3,"interpellé":3,
+        "tribunal de commerce":3,"jugement":3,"plainte":3,
+        "dépôt de bilan":4,"dissolution":3,"peine de prison":5,
+        "incarcéré":5,"inculpé":4,"mise en cause":3,"procès":3,
+        "arrêté":3,"interpellé":3,"mandat d arrêt":5,"détention":4,
         # EN
-        "convicted":5,"conviction":5,"indicted":4,"arrested":4,"imprisoned":5,
-        "bankruptcy":4,"liquidation":4,"sued":3,"lawsuit":3,"court ruling":3,
-        "criminal charges":5,"plea guilty":5,"sentenced":5,
+        "convicted":5,"conviction":5,"indicted":4,"arrested":4,
+        "imprisoned":5,"bankruptcy":4,"liquidation":4,"sued":3,
+        "lawsuit":3,"court ruling":3,"criminal charges":5,
+        "plea guilty":5,"sentenced":5,"warrant":4,"detained":4,
+        "extradited":5,"deported":4,"defaulted":3,
+        # ES
+        "condenado":5,"arrestado":4,"investigado":3,"demanda":3,
+        "quiebra":4,"imputado":4,"detenido":4,
+        # PT
+        "condenado":5,"preso":5,"investigado":3,"falência":4,
+        "indiciado":4,"detido":4,
+        # DE
+        "verurteilt":5,"verhaftet":4,"angeklagt":4,"insolvenz":4,
+        "ermittlung":3,"haftbefehl":5,
+        # IT
+        "condannato":5,"arrestato":4,"indagato":3,"fallimento":4,
+        "imputato":4,"detenuto":4,
+        # AR
+        "مدان":5,"معتقل":4,"محقق":3,"إفلاس":4,"اعتقال":4,
+        # RU
+        "осуждён":5,"арестован":4,"обвиняемый":4,"банкротство":4,
+        "задержан":3,"обыск":3,
     },
     "reputation": {
         # FR
         "arnaqueur":4,"escroc":4,"mauvais payeur":3,"litige client":2,
-        "plainte client":3,"avis négatif":2,"très mauvais":2,"déconseillé":2,
+        "plainte client":3,"très mauvais":2,"déconseillé":2,
         "méfiez-vous":3,"alerte":3,"avertissement":3,"mise en garde":3,
-        "signalement":3,"dénonciation":3,
+        "signalement":3,"dénonciation":3,"victime":2,
         # EN
-        "scammer":4,"bad reviews":2,"complaint":2,"warning":3,"alert":3,
-        "avoid":2,"do not trust":3,"rip off":3,"negative":2,
+        "scammer":4,"bad reviews":2,"complaint":2,"warning":3,
+        "alert":3,"avoid":2,"do not trust":3,"rip off":3,
+        "victim":2,"dishonest":3,"untrustworthy":3,
+        # ES
+        "estafador":4,"queja":2,"advertencia":3,"víctima":2,
+        # PT
+        "golpista":4,"reclamação":2,"alerta":3,"vítima":2,
     },
     "pep": {
         # FR
         "personnalité politique":3,"personnage politiquement exposé":4,"pep":3,
         "ministre":3,"député":3,"sénateur":3,"préfet":3,"ambassadeur":3,
-        "élu":2,"fonctionnaire":2,"haut fonctionnaire":3,"magistrat":3,
-        "dirigeant":2,"président":2,"directeur général":1,
+        "haut fonctionnaire":3,"magistrat":3,"élu":2,
         # EN
-        "politically exposed":4,"politician":3,"minister":3,"senator":3,
-        "ambassador":3,"official":2,"government":2,"public figure":2,
+        "politically exposed":4,"politician":3,"minister":3,
+        "senator":3,"ambassador":3,"official":2,"government":2,
+        # ES/PT
+        "político":3,"ministro":3,"senador":3,"funcionario":2,
+        # AR
+        "سياسي":3,"وزير":3,"مسؤول":2,
+        # RU
+        "политик":3,"министр":3,"чиновник":2,
     },
     "positive": {
-        # FR — ces mots réduisent le score
+        # FR
         "agréé":2,"accrédité":2,"certifié":2,"récompensé":2,"fiable":2,
-        "reconnu":1,"bien noté":2,"excellent":1,"recommandé":2,"sérieux":1,
-        "régulé":2,"autorisation":2,"license":2,"conforme":2,
+        "reconnu":1,"bien noté":2,"recommandé":2,"régulé":2,"conforme":2,
         # EN
         "accredited":2,"certified":2,"award":1,"trusted":2,"reliable":2,
         "regulated":2,"licensed":2,"compliant":2,"reputable":2,
+        # ES/PT
+        "certificado":2,"acreditado":2,"regulado":2,"confiable":2,
     },
 }
 
-# Domaines sources connus et leur crédibilité (multiplicateur)
 SOURCE_CREDIBILITY = {
+    # Presse FR
     "lemonde.fr":1.5,"lefigaro.fr":1.5,"liberation.fr":1.3,"bfmtv.com":1.3,
     "franceinfo.fr":1.4,"latribune.fr":1.4,"lesechos.fr":1.5,"capital.fr":1.3,
-    "challenges.fr":1.3,"reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,
-    "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,"wsj.com":1.5,
+    "challenges.fr":1.3,"leparisien.fr":1.3,"20minutes.fr":1.1,
+    # Presse internationale
+    "reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,"wsj.com":1.5,
+    "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,
+    "spiegel.de":1.4,"elpais.com":1.4,"corriere.it":1.3,
+    # Régulateurs / justice
     "opensanctions.org":2.0,"legifrance.gouv.fr":2.0,"justice.fr":2.0,
-    "bodacc.fr":1.8,"infogreffe.fr":1.8,"amf-france.org":2.0,"acpr.banque-france.fr":2.0,
-    "interpol.int":2.0,"europol.europa.eu":2.0,"tracfin.gouv.fr":2.0,
-    "tribunal.fr":1.8,"tribunaux.fr":1.8,
-    "trustpilot.com":1.0,"avis-verifies.com":0.9,"google.com":0.8,
+    "bodacc.fr":1.8,"infogreffe.fr":1.8,"amf-france.org":2.0,
+    "acpr.banque-france.fr":2.0,"interpol.int":2.0,"europol.europa.eu":2.0,
+    "tracfin.gouv.fr":2.0,"tribunal.fr":1.8,"courdecassation.fr":1.9,
+    "sec.gov":2.0,"ofac.treas.gov":2.0,"pacer.gov":1.8,
+    "companieshouse.gov.uk":1.7,"opencorporates.com":1.5,
+    "pappers.fr":1.6,"societe.com":1.4,"verif.com":1.3,
+    # Avis
+    "trustpilot.com":1.1,"avis-verifies.com":1.0,"glassdoor.com":1.0,
+    # Arnaques
+    "signal-arnaques.com":1.5,"cybermalveillance.gouv.fr":1.8,
+    "escroqueries.fr":1.4,
 }
 
 def _text_lower(s): return s.lower() if s else ""
 
+
 def analyze_local(entity: str, search_results: list, scraped_texts: list,
                   os_result: dict, filter_level: int = 0) -> dict:
     """
-    Moteur d analyse risque 100% local.
-
-    filter_level 0..10 :
-      0  = aucun filtre (tout est comptabilisé, max faux positifs)
-      1-3 = filtre léger : entité présente dans la source
-      4-6 = filtre modéré : entité dans ±400 chars autour du mot-clé
-      7-9 = filtre strict  : entité dans ±180 chars autour du mot-clé
-      10  = filtre extrême : entité dans ±60 chars + token exact requis
+    Moteur multilingue. filter_level 0-10 :
+      0   = aucun filtre (tout remonte pour revue humaine)
+      1-3 = entité présente dans la source
+      4-6 = entité dans ±400 chars du mot-clé
+      7-9 = entité dans ±180 chars
+      10  = entité dans ±60 chars (extrême)
     """
-    # ── Paramètres selon filter_level ──────────────────────────────
-    # Source-level pre-filter : exiger que l entite soit dans le texte ?
     require_entity_in_source = (filter_level >= 1)
-    # Proximity window (chars autour du mot-clé) : None = désactivé
     if filter_level == 0:
-        proximity_window = None       # pas de filtre proximité
+        proximity_window = None
     elif filter_level <= 3:
-        proximity_window = None       # filtre source seulement
+        proximity_window = None
     elif filter_level <= 6:
         proximity_window = 400
     elif filter_level <= 9:
         proximity_window = 180
     else:
         proximity_window = 60
-    # Score minimum pour qu un article soit retenu comme negative_news
-    min_neg_score = max(0.5, filter_level * 0.3)
 
-    # ── Tokens entité ───────────────────────────────────────────────
+    min_neg_score = max(0.3, filter_level * 0.25)
+
     entity_low   = entity.lower().strip()
     entity_words = [w for w in entity_low.split() if len(w) >= 3]
     entity_tokens = list(set([entity_low] + entity_words))
@@ -1084,27 +1188,38 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
 
     def entity_near_kw(txt_low: str, kw_idx: int) -> bool:
         if proximity_window is None:
-            return True   # filtre proximité désactivé
+            return True
         ctx = txt_low[max(0, kw_idx - proximity_window): kw_idx + proximity_window + len(entity_low)]
         return any(tok in ctx for tok in entity_tokens)
 
     scores_by_cat = {k: 0.0 for k in RISK_KEYWORDS}
     negative_news = []
+    all_articles  = []   # TOUS les articles pour revue humaine
     all_text_sources = []
 
-    # ── Construire la liste de sources ─────────────────────────────
+    # Build source list
     for r in search_results:
         combined = f"{r.get('title','')} {r.get('snippet','')}".strip()
         if not combined:
             continue
         domain = urlparse(r.get("url","")).netloc.replace("www.","")
         cred   = SOURCE_CREDIBILITY.get(domain, 1.0)
-        if require_entity_in_source and not entity_present(combined):
+        entity_found = entity_present(combined)
+
+        # Store ALL articles for human review
+        all_articles.append({
+            "title":   r.get("title",""),
+            "url":     r.get("url",""),
+            "snippet": r.get("snippet",""),
+            "domain":  domain,
+            "entity_mentioned": entity_found,
+        })
+
+        if require_entity_in_source and not entity_found:
             continue
         all_text_sources.append({
             "text": combined, "title": r.get("title",""),
             "url": r.get("url",""), "domain": domain, "cred": cred,
-            "is_scrape": False
         })
 
     for t in scraped_texts:
@@ -1114,10 +1229,14 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
             continue
         all_text_sources.append({
             "text": t, "title": "", "url": "", "domain": "", "cred": 1.0,
-            "is_scrape": True
         })
 
-    # ── Scoring ─────────────────────────────────────────────────────
+    # Scoring
+    nature_map = {
+        "sanctions":"Sanction / Liste noire", "fraud":"Fraude / Corruption",
+        "judicial":"Litige judiciaire",       "reputation":"Réputation négative",
+        "pep":"Exposition PEP"
+    }
     for src in all_text_sources:
         txt_low = src["text"].lower()
         for cat, kws in RISK_KEYWORDS.items():
@@ -1132,44 +1251,33 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
                         break
                     idx = txt_low.find(kw, idx + 1)
 
-            # Build negative news entry
             if cat != "positive" and cat_hits and src.get("title"):
                 neg_score = sum(w for _, w in cat_hits)
                 if neg_score >= min_neg_score:
-                    nature_map = {
-                        "sanctions": "Sanction / Liste noire",
-                        "fraud":     "Fraude / Corruption",
-                        "judicial":  "Litige judiciaire",
-                        "reputation":"Réputation négative",
-                        "pep":       "Exposition PEP"
-                    }
                     gravite = "eleve" if neg_score >= 7 else ("moyen" if neg_score >= 4 else "faible")
                     negative_news.append({
-                        "titre":     src["title"][:110],
-                        "source":    src.get("domain",""),
-                        "url":       src.get("url",""),
-                        "date":      "",
-                        "nature":    nature_map.get(cat, cat),
-                        "gravite":   gravite,
-                        "mots_cles": [kw for kw, _ in cat_hits[:4]],
+                        "titre":      src["title"][:120],
+                        "source":     src.get("domain",""),
+                        "url":        src.get("url",""),
+                        "date":       "",
+                        "nature":     nature_map.get(cat, cat),
+                        "gravite":    gravite,
+                        "mots_cles":  [kw for kw, _ in cat_hits[:5]],
                         "score_brut": round(neg_score, 1),
-                        "cat":       cat,
+                        "cat":        cat,
                     })
 
-    # Deduplicate: keep highest-score per title prefix
-    seen_titles = set()
-    neg_dedup = []
+    # Deduplicate negative_news
+    seen_titles, neg_dedup = set(), []
     for n in sorted(negative_news, key=lambda x: x["score_brut"], reverse=True):
         key = n["titre"][:45].lower()
         if key not in seen_titles:
             seen_titles.add(key)
             neg_dedup.append(n)
 
-    # OpenSanctions: hard evidence, add directly
     if os_result.get("found"):
         scores_by_cat["sanctions"] += os_result["count"] * 12
 
-    # Final risk score — calibrated to avoid over-inflation
     raw = (
         scores_by_cat["sanctions"] * 3.0 +
         scores_by_cat["fraud"]     * 2.5 +
@@ -1180,13 +1288,11 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
     positive_offset = scores_by_cat["positive"] * 2.5
     score = min(100, max(0, int(raw * 1.8 - positive_offset)))
 
-    # Niveau
     if score >= 70:    niveau = "CRITIQUE"
     elif score >= 45:  niveau = "ELEVE"
     elif score >= 20:  niveau = "MODERE"
     else:              niveau = "FAIBLE"
 
-    # Recommandation
     if score >= 60 or os_result.get("found") or scores_by_cat["sanctions"] > 8:
         reco = "REFUSER"
     elif score >= 25 or len(neg_dedup) >= 2:
@@ -1194,24 +1300,21 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
     else:
         reco = "ACCEPTER"
 
-    # Flags
     sanctions_trouve  = os_result.get("found", False) or scores_by_cat["sanctions"] > 5
     sanctions_details = ""
     if os_result.get("found"):
         sanctions_details = f"{os_result['count']} résultat(s) OpenSanctions : " + \
             ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
     elif scores_by_cat["sanctions"] > 5:
-        kws_found = set(kw for src in all_text_sources
-                        for kw in RISK_KEYWORDS["sanctions"]
-                        if kw in src["text"].lower())
-        sanctions_details = "Indicateurs : " + ", ".join(list(kws_found)[:5])
+        kws_f = set(kw for src in all_text_sources
+                    for kw in RISK_KEYWORDS["sanctions"] if kw in src["text"].lower())
+        sanctions_details = "Indicateurs : " + ", ".join(list(kws_f)[:5])
 
     litiges_trouve  = scores_by_cat["judicial"] > 4
     litiges_details = ""
     if litiges_trouve:
         kws_j = set(kw for src in all_text_sources
-                    for kw in RISK_KEYWORDS["judicial"]
-                    if kw in src["text"].lower())
+                    for kw in RISK_KEYWORDS["judicial"] if kw in src["text"].lower())
         litiges_details = "Indicateurs : " + ", ".join(list(kws_j)[:6])
 
     pep_trouve  = scores_by_cat["pep"] > 3
@@ -1226,226 +1329,249 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
     else:
         rep_notations = "Réputation neutre ou insuffisamment documentée."
 
-    nb_neg       = len(neg_dedup)
-    src_count    = len(all_text_sources)
-    total_queried = len(search_results)
+    nb_neg     = len(neg_dedup)
+    src_count  = len(all_text_sources)
+    nb_total   = len(search_results)
 
-    resume_parts = [
-        f"Screening de {total_queried} résultats web ({src_count} mentionnant directement l entite)."
-    ]
+    resume_parts = [f"Screening de {nb_total} résultats ({src_count} analysés)."]
     if nb_neg:
-        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) directement associé(s) à {entity}.")
+        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) détecté(s) pour {entity}.")
     else:
-        resume_parts.append(f"Aucun signal négatif directement associé à {entity}.")
+        resume_parts.append(f"Aucun signal négatif significatif pour {entity}.")
     if sanctions_trouve:
-        resume_parts.append("⚠️ Indicateurs de sanctions ou restrictions détectés.")
+        resume_parts.append("⚠️ Indicateurs de sanctions détectés.")
     elif score < 20:
-        resume_parts.append("Profil de risque faible sur les sources consultées.")
+        resume_parts.append("Profil de risque faible.")
 
-    aggravants = []
-    attenuants = []
+    aggravants, attenuants = [], []
     if os_result.get("found"):
         aggravants.append(f"{os_result['count']} entrée(s) OpenSanctions confirmée(s)")
     if scores_by_cat["fraud"] > 5:
-        aggravants.append(f"Mots-clés fraude/corruption associés à l entite (score:{round(scores_by_cat['fraud'],1)})")
+        aggravants.append(f"Mots-clés fraude/corruption (score:{round(scores_by_cat['fraud'],1)})")
     if scores_by_cat["judicial"] > 4:
-        aggravants.append(f"Indicateurs procédures judiciaires liées à l entite (score:{round(scores_by_cat['judicial'],1)})")
+        aggravants.append(f"Indicateurs procédures judiciaires (score:{round(scores_by_cat['judicial'],1)})")
     if nb_neg >= 3:
-        aggravants.append(f"{nb_neg} actualités négatives confirmées")
+        aggravants.append(f"{nb_neg} actualités négatives détectées")
     if pos_score > 4:
-        attenuants.append(f"Signaux positifs détectés (certification, conformité, score:{round(pos_score,1)})")
+        attenuants.append(f"Signaux positifs détectés (score:{round(pos_score,1)})")
     if nb_neg == 0 and not os_result.get("found"):
-        attenuants.append("Aucun signal négatif associé directement à l entite")
+        attenuants.append("Aucun signal négatif significatif détecté")
     if scores_by_cat["sanctions"] == 0:
         attenuants.append("Absent des bases de sanctions consultées")
 
     confidence = "ELEVEE" if src_count >= 10 else ("MOYENNE" if src_count >= 4 else "FAIBLE")
 
     return {
-        "score_risque":          score,
-        "niveau_risque":         niveau,
-        "resume_executif":       " ".join(resume_parts),
-        "negative_news":         neg_dedup[:15],
-        "sanctions":             {"trouve": sanctions_trouve,  "details": sanctions_details},
-        "litiges_judiciaires":   {"trouve": litiges_trouve,    "details": litiges_details},
-        "pep_exposure":          {"trouve": pep_trouve,        "details": pep_details},
-        "reputation_notations":  rep_notations,
-        "facteurs_aggravants":   aggravants,
-        "facteurs_attenuants":   attenuants,
-        "recommandation":        reco,
-        "sources_consultees":    list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:20],
-        "confiance_analyse":     confidence,
-        "scores_categories":     {k: round(v, 1) for k, v in scores_by_cat.items()},
-        "nb_sources_filtrees":   src_count,
-        "nb_sources_total":      total_queried,
-        "moteur":                "local_strict_v3",
+        "score_risque":        score,
+        "niveau_risque":       niveau,
+        "resume_executif":     " ".join(resume_parts),
+        "negative_news":       neg_dedup[:20],
+        "all_articles":        all_articles,       # TOUS pour revue humaine
+        "sanctions":           {"trouve": sanctions_trouve,  "details": sanctions_details},
+        "litiges_judiciaires": {"trouve": litiges_trouve,    "details": litiges_details},
+        "pep_exposure":        {"trouve": pep_trouve,        "details": pep_details},
+        "reputation_notations":rep_notations,
+        "facteurs_aggravants": aggravants,
+        "facteurs_attenuants": attenuants,
+        "recommandation":      reco,
+        "sources_consultees":  list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:25],
+        "confiance_analyse":   confidence,
+        "scores_categories":   {k: round(v, 1) for k, v in scores_by_cat.items()},
+        "nb_sources_filtrees": src_count,
+        "nb_sources_total":    nb_total,
+        "filter_level_used":   filter_level,
+        "moteur":              "local_multilang_v4",
     }
 
 
 def analyze_with_groq(entity, search_results, scraped_texts, groq_key) -> dict:
-    """
-    Option gratuite : Groq API (llama-3.1-8b-instant, gratuit jusqu'à 14 400 req/jour).
-    Clé gratuite sur console.groq.com
-    """
+    """Groq LLM boost — gratuit 14 400 req/jour sur console.groq.com"""
     ctx = []
     for i, sr in enumerate(search_results[:12]):
         ctx.append(f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:180]}")
     for i, t in enumerate(scraped_texts[:3]):
         if t.strip():
             ctx.append(f"[P{i+1}] {t[:600]}")
-
     prompt = f"""Tu es un analyste KYC/AML expert. Entité: «{entity}»
-
 Sources OSINT:
 {chr(10).join(ctx)}
-
 Réponds UNIQUEMENT avec ce JSON (aucun texte autour):
-{{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[{{"titre":"","source":"","date":"","nature":"","gravite":"faible","url":""}}],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","sources_consultees":[],"confiance_analyse":"MOYENNE"}}"""
-
+{{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[{{"titre":"","source":"","date":"","nature":"","gravite":"faible","url":""}}],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","confiance_analyse":"MOYENNE"}}"""
     try:
         r = requests.post("https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-            json={"model": "llama-3.1-8b-instant", "messages": [{"role":"user","content":prompt}],
-                  "max_tokens": 1800, "temperature": 0.1},
-            timeout=30)
+            json={"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":prompt}],
+                  "max_tokens":1800,"temperature":0.1}, timeout=30)
         if r.status_code == 200:
             raw = r.json()["choices"][0]["message"]["content"].strip()
-            raw = re.sub(r'^```json\s*', '', raw)
-            raw = re.sub(r'\s*```$', '', raw)
+            raw = re.sub(r'^```json\s*','',raw); raw = re.sub(r'\s*```$','',raw)
             result = json.loads(raw)
             result["moteur"] = "groq_llama3"
             return result
-    except Exception as e:
-        pass
+    except: pass
     return None
 
 
 def analyze_with_ollama(entity, search_results, scraped_texts) -> dict:
-    """
-    Option 100% locale et gratuite : Ollama (llama3, mistral, etc.)
-    Requiert Ollama installé localement : https://ollama.com
-    """
-    ctx = []
-    for i, sr in enumerate(search_results[:10]):
-        ctx.append(f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:150]}")
-
-    prompt = f"""Analyste KYC. Entité: «{entity}»
-Sources: {chr(10).join(ctx)}
+    """Ollama local — 100% privé, aucune donnée envoyée."""
+    ctx = [f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:150]}"
+           for i, sr in enumerate(search_results[:10])]
+    prompt = f"""Analyste KYC. Entité: «{entity}»\nSources: {chr(10).join(ctx)}
 Réponds UNIQUEMENT en JSON: {{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","confiance_analyse":"MOYENNE"}}"""
-
     try:
         r = requests.post("http://localhost:11434/api/generate",
-            json={"model": "llama3.2", "prompt": prompt, "stream": False},
-            timeout=60)
+            json={"model":"llama3.2","prompt":prompt,"stream":False}, timeout=60)
         if r.status_code == 200:
             raw = r.json().get("response","").strip()
-            raw = re.sub(r'^```json\s*', '', raw)
-            raw = re.sub(r'\s*```$', '', raw)
+            raw = re.sub(r'^```json\s*','',raw); raw = re.sub(r'\s*```$','',raw)
             result = json.loads(raw)
             result["moteur"] = "ollama_local"
             return result
-    except:
-        pass
+    except: pass
     return None
 
-# ══════════════════════════════════════════════════════════════════
-# PDF GENERATION
-# ══════════════════════════════════════════════════════════════════
-def generate_pdf_report(entity, iban_result, bank_info, os_result, analysis):
+def generate_pdf_report(entity, iban_result, bank_info, os_result, analysis,
+                        human_decision=None, human_comment="", analyst_name=""):
+    """
+    Génère le rapport PDF.
+    human_decision : None | 'RAS' | 'RISQUE_CONFIRME'
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.colors import HexColor
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, KeepTogether
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                    Table, TableStyle, HRFlowable)
     from reportlab.lib.units import mm
-    from reportlab.lib.enums import TA_CENTER
 
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4,
-                             leftMargin=18*mm, rightMargin=18*mm,
-                             topMargin=16*mm, bottomMargin=16*mm)
+    buf  = BytesIO()
+    doc  = SimpleDocTemplate(buf, pagesize=A4,
+                              leftMargin=18*mm, rightMargin=18*mm,
+                              topMargin=16*mm,  bottomMargin=16*mm)
 
-    BG    = HexColor("#0a0d14"); SURF  = HexColor("#111520")
-    BORD  = HexColor("#1e2535"); ACC   = HexColor("#00d4ff")
-    GREEN = HexColor("#00cc66"); RED   = HexColor("#ff3366")
-    YEL   = HexColor("#ffcc00"); TEXT  = HexColor("#c8d6e5")
-    MUTED = HexColor("#5a6a7a"); ACC2  = HexColor("#ff6b35")
+    BG=HexColor("#0a0d14"); SURF=HexColor("#111520"); BORD=HexColor("#1e2535")
+    ACC=HexColor("#00d4ff"); GREEN=HexColor("#00cc66"); RED=HexColor("#ff3366")
+    YEL=HexColor("#ffcc00"); TEXT=HexColor("#c8d6e5"); MUTED=HexColor("#5a6a7a")
+    ACC2=HexColor("#ff6b35"); WHITE=HexColor("#ffffff")
 
     styles = getSampleStyleSheet()
-    def S(nm, **kw):
-        return ParagraphStyle(nm, parent=styles["Normal"], **kw)
+    def S(nm,**kw): return ParagraphStyle(nm,parent=styles["Normal"],**kw)
+    sH1   = S("H1", fontSize=11,textColor=ACC,  fontName="Helvetica-Bold",spaceBefore=12,spaceAfter=5)
+    sBody = S("B",  fontSize=8.5,textColor=TEXT,fontName="Helvetica",     spaceAfter=3, leading=13)
+    sSmall= S("Sm", fontSize=7.5,textColor=MUTED,fontName="Helvetica",    spaceAfter=2)
+    sMono = S("Mo", fontSize=8,  textColor=ACC2, fontName="Courier",      spaceAfter=2)
+    sWarn = S("W",  fontSize=9,  textColor=YEL,  fontName="Helvetica-Bold",spaceAfter=4)
+    sOK   = S("OK", fontSize=9,  textColor=GREEN,fontName="Helvetica-Bold",spaceAfter=4)
+    sRed  = S("Rd", fontSize=9,  textColor=RED,  fontName="Helvetica-Bold",spaceAfter=4)
 
-    sTitle = S("T", fontSize=18, textColor=ACC,  fontName="Helvetica-Bold")
-    sH1    = S("H1",fontSize=11, textColor=ACC,  fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=5)
-    sH2    = S("H2",fontSize=9,  textColor=TEXT, fontName="Helvetica-Bold", spaceBefore=8,  spaceAfter=3)
-    sBody  = S("B", fontSize=8.5,textColor=TEXT, fontName="Helvetica",     spaceAfter=3,  leading=13)
-    sSmall = S("Sm",fontSize=7.5,textColor=MUTED,fontName="Helvetica",     spaceAfter=2)
-    sMono  = S("Mo",fontSize=8,  textColor=ACC2, fontName="Courier",       spaceAfter=2)
-
-    niveau = analysis.get("niveau_risque","N/A")
-    score  = analysis.get("score_risque","N/A")
-    reco   = analysis.get("recommandation","N/A")
-    rcolor = {"FAIBLE":GREEN,"MODERE":YEL,"ELEVE":ACC2,"CRITIQUE":RED}.get(niveau,MUTED)
-    rccolor= {"ACCEPTER":GREEN,"VIGILANCE_RENFORCEE":YEL,"REFUSER":RED}.get(reco,MUTED)
+    niveau  = analysis.get("niveau_risque","N/A")
+    score   = analysis.get("score_risque","N/A")
+    reco    = analysis.get("recommandation","N/A")
+    fl      = analysis.get("filter_level_used", "N/A")
+    rcolor  = {"FAIBLE":GREEN,"MODERE":YEL,"ELEVE":ACC2,"CRITIQUE":RED}.get(niveau,MUTED)
+    rccolor = {"ACCEPTER":GREEN,"VIGILANCE_RENFORCEE":YEL,"REFUSER":RED}.get(reco,MUTED)
+    now_str = datetime.now().strftime("%d/%m/%Y à %H:%M:%S")
 
     story = []
 
-    # Header
-    story.append(Table([["🛡️  FinShield OSINT — Rapport de Conformité",
-                          f"Date : {datetime.now().strftime('%d/%m/%Y %H:%M')}"]],
-        colWidths=[120*mm, 52*mm],
+    # ── Header ────────────────────────────────────────────────────
+    story.append(Table(
+        [["🛡️  FinShield OSINT — Rapport de Conformité",
+          f"Généré le\n{now_str}"]],
+        colWidths=[120*mm,52*mm],
         style=TableStyle([
             ("BACKGROUND",(0,0),(-1,-1),BG),
-            ("TEXTCOLOR",(0,0),(0,0),ACC), ("TEXTCOLOR",(1,0),(1,0),MUTED),
+            ("TEXTCOLOR",(0,0),(0,0),ACC),("TEXTCOLOR",(1,0),(1,0),MUTED),
             ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),14),
             ("FONTSIZE",(1,0),(1,0),8),("ALIGN",(1,0),(1,0),"RIGHT"),
             ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10),
         ])))
-    story.append(HRFlowable(width="100%",thickness=1.5,color=ACC,spaceAfter=14))
+    story.append(HRFlowable(width="100%",thickness=1.5,color=ACC,spaceAfter=12))
 
-    # Entity + score box
+    # ── Entity ────────────────────────────────────────────────────
     story.append(Paragraph(f"Entité analysée : <b>{entity}</b>", sH1))
+
+    # ── Human validation stamp ────────────────────────────────────
+    if human_decision == "RAS":
+        stamp_color = GREEN
+        stamp_text  = "✅  VALIDATION HUMAINE — RAS (Rien à Signaler)"
+        stamp_sub   = f"L'analyste confirme : aucune information négative retenue après examen."
+    elif human_decision == "RISQUE_CONFIRME":
+        stamp_color = RED
+        stamp_text  = "⚠️  VALIDATION HUMAINE — INFORMATIONS NÉGATIVES CONFIRMÉES"
+        stamp_sub   = f"L'analyste confirme les signaux détectés par FinShield."
+    else:
+        stamp_color = MUTED
+        stamp_text  = "⏳  EN ATTENTE DE VALIDATION HUMAINE"
+        stamp_sub   = "Ce rapport est un résultat automatique non encore validé par un analyste."
+
     story.append(Table(
-        [[f"Score : {score}/100", f"Niveau : {niveau}", f"Recommandation : {reco}",
-          f"Confiance : {analysis.get('confiance_analyse','N/A')}"]],
-        colWidths=[38*mm,38*mm,60*mm,36*mm],
+        [[stamp_text]],
+        colWidths=[172*mm],
+        style=TableStyle([
+            ("BACKGROUND",(0,0),(0,0),BG),
+            ("TEXTCOLOR",(0,0),(0,0),stamp_color),
+            ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),10),
+            ("ALIGN",(0,0),(0,0),"CENTER"),("VALIGN",(0,0),(0,0),"MIDDLE"),
+            ("TOPPADDING",(0,0),(0,0),10),("BOTTOMPADDING",(0,0),(0,0),6),
+            ("BOX",(0,0),(0,0),1.5,stamp_color),
+        ])))
+    story.append(Paragraph(stamp_sub, sSmall))
+
+    if analyst_name or human_comment:
+        rows = []
+        if analyst_name:
+            rows.append(["Analyste",    analyst_name])
+        if human_comment:
+            rows.append(["Commentaire", human_comment])
+        rows.append(["Date validation", now_str])
+        t = Table(rows, colWidths=[38*mm,134*mm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,-1),BG),
+            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
+            ("TEXTCOLOR",(0,0),(0,-1),MUTED),("TEXTCOLOR",(1,0),(-1,-1),TEXT),
+            ("GRID",(0,0),(-1,-1),0.3,BORD),
+            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ]))
+        story.append(t)
+    story.append(Spacer(1,8))
+
+    # ── Score box ─────────────────────────────────────────────────
+    story.append(Table(
+        [[f"Score : {score}/100", f"Niveau : {niveau}",
+          f"Recommandation : {reco}", f"Filtre : {fl}/10"]],
+        colWidths=[40*mm,38*mm,60*mm,34*mm],
         style=TableStyle([
             ("BACKGROUND",(0,0),(-1,-1),SURF),
             ("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8.5),
             ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10),
+            ("TOPPADDING",(0,0),(-1,-1),9),("BOTTOMPADDING",(0,0),(-1,-1),9),
             ("TEXTCOLOR",(0,0),(0,0),TEXT),
-            ("TEXTCOLOR",(1,0),(1,0),rcolor), ("FONTNAME",(1,0),(1,0),"Helvetica-Bold"),
-            ("TEXTCOLOR",(2,0),(2,0),rccolor),("FONTNAME",(2,0),(2,0),"Helvetica-Bold"),
+            ("TEXTCOLOR",(1,0),(1,0),rcolor),("TEXTCOLOR",(2,0),(2,0),rccolor),
             ("TEXTCOLOR",(3,0),(3,0),MUTED),
             ("BOX",(0,0),(-1,-1),0.5,BORD),("GRID",(0,0),(-1,-1),0.5,BORD),
         ])))
     story.append(Spacer(1,8))
 
-    # Summary
+    # ── Summary ───────────────────────────────────────────────────
     story.append(Paragraph("Résumé exécutif", sH1))
     story.append(Paragraph(analysis.get("resume_executif","Non disponible."), sBody))
     story.append(HRFlowable(width="100%",thickness=0.5,color=BORD,spaceAfter=6))
 
-    # IBAN section
+    # ── IBAN ──────────────────────────────────────────────────────
     if iban_result and iban_result.get("raw"):
         story.append(Paragraph("Vérification IBAN", sH1))
         rows = [["Champ","Valeur"]]
-        fields = [("IBAN formaté",iban_result.get("formatted","")),
-                  ("Statut",iban_result.get("message","")),
-                  ("Pays",iban_result.get("country","")),
-                  ("Code banque",iban_result.get("bank_code","")),
-                  ("Code guichet",iban_result.get("branch_code","")),
-                  ("N° de compte",iban_result.get("account_no","")),
-                  ("Clé RIB",iban_result.get("rib_key",""))]
-        for f,v in fields:
-            if v:
-                rows.append([f,v])
+        for f,v in [("IBAN",iban_result.get("formatted","")),
+                    ("Statut",iban_result.get("message","")),
+                    ("Pays",iban_result.get("country","")),
+                    ("Code banque",iban_result.get("bank_code",""))]:
+            if v: rows.append([f,v])
         if bank_info:
             rows += [("Banque",bank_info.get("name","")),
-                     ("Adresse",f"{bank_info.get('address','')} {bank_info.get('city','')} {bank_info.get('postal_code','')}".strip()),
+                     ("Adresse",f"{bank_info.get('address','')} {bank_info.get('city','')}".strip()),
                      ("BIC",bank_info.get("bic","")),
                      ("Type",bank_info.get("type",""))]
-        t = Table(rows, colWidths=[48*mm,124*mm])
+        t = Table(rows, colWidths=[40*mm,132*mm])
         t.setStyle(TableStyle([
             ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
             ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
@@ -1454,92 +1580,116 @@ def generate_pdf_report(entity, iban_result, bank_info, os_result, analysis):
             ("GRID",(0,0),(-1,-1),0.3,BORD),
             ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ]))
-        story.append(t)
-        story.append(Spacer(1,8))
+        story.append(t); story.append(Spacer(1,8))
 
-    # Regulatory checks
+    # ── Regulatory checks ─────────────────────────────────────────
     story.append(Paragraph("Vérifications Réglementaires (KYC/AML)", sH1))
     san = analysis.get("sanctions",{})
     lit = analysis.get("litiges_judiciaires",{})
     pep = analysis.get("pep_exposure",{})
-    rcheck = [["Catégorie","Résultat","Détails"],
-              ["Sanctions intl","TROUVÉ" if san.get("trouve") else "Non trouvé", san.get("details","")[:90]],
-              ["OpenSanctions",f"{os_result.get('count',0)} résultat(s)",
-               ", ".join(r.get("caption","") for r in os_result.get("results",[])[:2])[:90]],
-              ["Litiges judiciaires","TROUVÉ" if lit.get("trouve") else "Non trouvé", lit.get("details","")[:90]],
-              ["Exposition PEP","TROUVÉ" if pep.get("trouve") else "Non trouvé", pep.get("details","")[:90]]]
-    t = Table(rcheck, colWidths=[42*mm,30*mm,100*mm])
+    rc  = [["Catégorie","Résultat","Détails"],
+           ["Sanctions","DÉTECTÉ" if san.get("trouve") else "Non détecté",san.get("details","")[:85]],
+           ["OpenSanctions",f"{os_result.get('count',0)} hit(s)",
+            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:2])[:85]],
+           ["Litiges judiciaires","DÉTECTÉ" if lit.get("trouve") else "Non détecté",lit.get("details","")[:85]],
+           ["Exposition PEP","DÉTECTÉ" if pep.get("trouve") else "Non détecté",pep.get("details","")[:85]]]
+    t = Table(rc, colWidths=[40*mm,28*mm,104*mm])
     ts = TableStyle([
         ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
         ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),
-        ("TEXTCOLOR",(0,1),(-1,-1),TEXT),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
         ("GRID",(0,0),(-1,-1),0.3,BORD),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
     ])
     for i in range(1,5):
-        val = rcheck[i][1]
-        col = RED if val == "TROUVÉ" or (i==2 and os_result.get("count",0)>0) else GREEN
+        col = RED if "DÉTECTÉ" in str(rc[i][1]) or (i==2 and os_result.get("count",0)>0) else GREEN
         ts.add("TEXTCOLOR",(1,i),(1,i),col)
         ts.add("FONTNAME",(1,i),(1,i),"Helvetica-Bold")
-    t.setStyle(ts)
-    story.append(t)
-    story.append(Spacer(1,8))
+    t.setStyle(ts); story.append(t); story.append(Spacer(1,8))
 
-    # Negative news
+    # ── Negative news ─────────────────────────────────────────────
     neg = analysis.get("negative_news",[])
-    story.append(Paragraph("Actualités Négatives Détectées", sH1))
+    story.append(Paragraph(f"Signaux Négatifs Détectés ({len(neg)})", sH1))
     if neg:
-        nh = [["Titre","Source","Nature","Gravité"]]
-        for n in neg[:10]:
-            nh.append([n.get("titre","")[:70], n.get("source","")[:25],
-                       n.get("nature","")[:30], n.get("gravite","").upper()])
-        t = Table(nh, colWidths=[80*mm,30*mm,40*mm,22*mm])
+        nh = [["Titre","Source","Nature","Gravité","Mots-clés"]]
+        for n in neg[:15]:
+            nh.append([
+                n.get("titre","")[:65],
+                n.get("source","")[:20],
+                n.get("nature","")[:25],
+                n.get("gravite","").upper(),
+                ", ".join(n.get("mots_cles",[])[:3])[:30],
+            ])
+        t = Table(nh, colWidths=[65*mm,25*mm,30*mm,18*mm,34*mm])
         gmap = {"FAIBLE":GREEN,"MOYEN":YEL,"ELEVE":RED}
         ts2 = TableStyle([
             ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),7.5),
+            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),7),
             ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
             ("GRID",(0,0),(-1,-1),0.3,BORD),
             ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
         ])
-        for i,n in enumerate(neg[:10],1):
+        for i,n in enumerate(neg[:15],1):
             c = gmap.get(n.get("gravite","").upper(),MUTED)
             ts2.add("TEXTCOLOR",(3,i),(3,i),c)
             ts2.add("FONTNAME",(3,i),(3,i),"Helvetica-Bold")
-        t.setStyle(ts2)
-        story.append(t)
+        t.setStyle(ts2); story.append(t)
     else:
-        story.append(Paragraph("Aucune actualité négative identifiée dans les sources consultées.", sBody))
+        story.append(Paragraph("Aucun signal négatif détecté dans les sources consultées.", sBody))
     story.append(Spacer(1,6))
 
-    # Factors
+    # ── All articles (human review list) ──────────────────────────
+    all_art = analysis.get("all_articles",[])
+    story.append(Paragraph(f"Liste complète des sources pour revue humaine ({len(all_art)} articles)", sH1))
+    if all_art:
+        ah = [["Titre","Domaine","Entité mentionnée"]]
+        for a in all_art[:40]:
+            ah.append([
+                a.get("title","")[:75],
+                a.get("domain","")[:30],
+                "✓" if a.get("entity_mentioned") else "—"
+            ])
+        t = Table(ah, colWidths=[110*mm,42*mm,20*mm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
+            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),7),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
+            ("GRID",(0,0),(-1,-1),0.3,BORD),
+            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+            ("TEXTCOLOR",(2,1),(-1,-1),GREEN),
+        ]))
+        story.append(t)
+    story.append(Spacer(1,6))
+
+    # ── Factors ───────────────────────────────────────────────────
     fa = analysis.get("facteurs_aggravants",[])
     fat = analysis.get("facteurs_attenuants",[])
     if fa or fat:
-        story.append(Paragraph("Analyse des Facteurs de Risque", sH1))
-        col1 = [Paragraph("⚠ Facteurs aggravants", S("fah",fontSize=8.5,textColor=RED,fontName="Helvetica-Bold"))]
-        for f in fa: col1.append(Paragraph(f"• {f}", sBody))
-        col2 = [Paragraph("✓ Facteurs atténuants", S("fat",fontSize=8.5,textColor=GREEN,fontName="Helvetica-Bold"))]
-        for f in fat: col2.append(Paragraph(f"• {f}", sBody))
-        story.append(Table([[col1,col2]], colWidths=[87*mm,87*mm],
+        story.append(Paragraph("Facteurs de Risque", sH1))
+        c1 = [Paragraph("⚠ Aggravants", S("fa",fontSize=8.5,textColor=RED,fontName="Helvetica-Bold"))]
+        for f in fa: c1.append(Paragraph(f"• {f}", sBody))
+        c2 = [Paragraph("✓ Atténuants", S("ft",fontSize=8.5,textColor=GREEN,fontName="Helvetica-Bold"))]
+        for f in fat: c2.append(Paragraph(f"• {f}", sBody))
+        story.append(Table([[c1,c2]], colWidths=[86*mm,86*mm],
             style=TableStyle([
-                ("VALIGN",(0,0),(-1,-1),"TOP"),
-                ("BACKGROUND",(0,0),(-1,-1),BG),
+                ("VALIGN",(0,0),(-1,-1),"TOP"),("BACKGROUND",(0,0),(-1,-1),BG),
                 ("GRID",(0,0),(-1,-1),0.3,BORD),
-                ("TOPPADDING",(0,0),(-1,-1),8),("LEFTPADDING",(0,0),(-1,-1),8),
+                ("TOPPADDING",(0,0),(-1,-1),7),("LEFTPADDING",(0,0),(-1,-1),7),
             ])))
         story.append(Spacer(1,8))
 
-    # Footer
+    # ── Footer ────────────────────────────────────────────────────
     story.append(HRFlowable(width="100%",thickness=0.5,color=BORD,spaceAfter=4))
+    verdict = f"VALIDATION : {human_decision or 'EN ATTENTE'}"
+    if analyst_name: verdict += f" par {analyst_name}"
     story.append(Paragraph(
-        f"Rapport généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} · FinShield OSINT v2 · "
-        f"CONFIDENTIEL — Usage interne uniquement · Ce rapport est informatif et ne constitue pas un avis juridique.",
+        f"FinShield OSINT v2 · {now_str} · {verdict} · "
+        f"CONFIDENTIEL — Usage interne · Résultat informatif, non constitutif d'un avis juridique.",
         sSmall))
 
     doc.build(story)
     return buf.getvalue()
+
 
 # ══════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -1994,27 +2144,97 @@ with tab2:
                     <small> · {r.get("snippet","")[:130]}</small>
                     </div>""", unsafe_allow_html=True)
 
-        # ── PDF SECTION — always visible after analysis ──────────
+        # ── ALL ARTICLES FOR HUMAN REVIEW ────────────────────────
         st.markdown("---")
-        if has_risk:
-            st.markdown("""<div class='warn-box'>
-            ⚠️ Des signaux ont été détectés — générez le rapport PDF pour documentation et analyse humaine.
+        all_art = analysis.get("all_articles", [])
+        with st.expander(f"📋 Liste complète pour revue humaine — {len(all_art)} articles collectés ({nb_filt} mentionnant directement l entité)", expanded=False):
+            st.markdown("""<div class='info-box'>
+            <b>Revue humaine requise.</b> Consultez chaque article, identifiez les informations négatives,
+            puis utilisez la zone de validation ci-dessous pour documenter votre décision.
+            La colonne <b>Entité ✓</b> indique si le nom recherché apparaît dans l article.
             </div>""", unsafe_allow_html=True)
+            # Split into two lists: entity-mentioned vs generic
+            art_entity  = [a for a in all_art if a.get("entity_mentioned")]
+            art_generic = [a for a in all_art if not a.get("entity_mentioned")]
 
-        pdf_col1, pdf_col2 = st.columns([1,2])
-        with pdf_col1:
-            btn_label = "⬇ GÉNÉRER RAPPORT PDF" if has_risk else "⬇ Générer rapport RAS (PDF)"
-            if st.button(btn_label, key="gen_pdf_main"):
-                with st.spinner("Génération du rapport PDF en cours..."):
+            st.markdown(f"**Articles mentionnant directement {entity_d} ({len(art_entity)})**")
+            for a in art_entity:
+                url = a.get("url","")
+                link = f"<a href='{url}' target='_blank' style='color:#00d4ff;'>→ lire</a>" if url else ""
+                st.markdown(f"""<div class='result-row' style='border-left:3px solid #00d4ff;'>
+                <b>{a.get("title","")[:100]}</b> {link}<br>
+                <small style='color:#5a6a7a;'>{a.get("domain","")} · {a.get("snippet","")[:120]}</small>
+                </div>""", unsafe_allow_html=True)
+
+            if art_generic:
+                st.markdown(f"**Autres articles (sans mention directe — {len(art_generic)})**")
+                for a in art_generic[:20]:
+                    url = a.get("url","")
+                    link = f"<a href='{url}' target='_blank' style='color:#5a6a7a;'>→ lire</a>" if url else ""
+                    st.markdown(f"""<div class='result-row'>
+                    <span style='color:#5a6a7a;'>{a.get("title","")[:100]}</span> {link}
+                    </div>""", unsafe_allow_html=True)
+
+        # ── HUMAN VALIDATION SECTION ──────────────────────────────
+        st.markdown("---")
+        st.markdown("""<div class='section-title'>✍️ VALIDATION HUMAINE</div>""", unsafe_allow_html=True)
+        st.markdown("""<div class='info-box'>
+        Après avoir examiné les articles ci-dessus, renseignez votre décision.
+        Le rapport PDF sera daté et horodaté avec votre validation.
+        </div>""", unsafe_allow_html=True)
+
+        vh1, vh2 = st.columns([1, 2])
+        with vh1:
+            analyst_name = st.text_input("👤 Nom de l analyste", placeholder="ex: Marie Dupont",
+                                          key="analyst_name")
+            human_decision = st.radio(
+                "Décision après analyse",
+                ["En attente", "✅ RAS — Rien à signaler", "⚠️ Informations négatives confirmées"],
+                key="human_decision",
+                help="RAS : aucun risque après vérification humaine | Négatif : les signaux sont avérés"
+            )
+        with vh2:
+            human_comment = st.text_area(
+                "Commentaire de l analyste",
+                placeholder="Ex: RAS apres verification (homonyme). Ou: Condamnation confirmee tribunal Paris 2022, article consulte.",
+                height=120,
+                key="human_comment"
+            )
+
+        # Map radio to decision code
+        decision_map = {
+            "En attente": None,
+            "✅ RAS — Rien à signaler": "RAS",
+            "⚠️ Informations négatives confirmées": "RISQUE_CONFIRME"
+        }
+        h_decision = decision_map.get(human_decision, None)
+
+        # PDF Generation
+        st.markdown("")
+        pdf_c1, pdf_c2 = st.columns([1, 2])
+        with pdf_c1:
+            if h_decision is None:
+                btn_lbl = "⬇ GÉNÉRER RAPPORT (en attente)"
+            elif h_decision == "RAS":
+                btn_lbl = "⬇ GÉNÉRER RAPPORT PDF — RAS ✅"
+            else:
+                btn_lbl = "⬇ GÉNÉRER RAPPORT PDF — RISQUE ⚠️"
+
+            if st.button(btn_lbl, key="gen_pdf_main"):
+                with st.spinner("Génération du rapport PDF..."):
                     try:
                         pdf_bytes = generate_pdf_report(
                             entity_d,
                             iban_data,
                             bank_data,
                             os_result,
-                            analysis
+                            analysis,
+                            human_decision=h_decision,
+                            human_comment=human_comment,
+                            analyst_name=analyst_name
                         )
-                        fname = f"FinShield_{entity_d.replace(' ','_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                        suffix = "RAS" if h_decision == "RAS" else ("RISQUE" if h_decision else "ATTENTE")
+                        fname  = f"FinShield_{entity_d.replace(' ','_')}_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                         st.download_button(
                             label="📥 Télécharger le rapport PDF",
                             data=pdf_bytes,
@@ -2022,23 +2242,32 @@ with tab2:
                             mime="application/pdf",
                             key="dl_pdf_main"
                         )
-                        if has_risk:
-                            st.markdown("<div class='ok-box'>✅ Rapport PDF généré — téléchargez ci-dessus.</div>", unsafe_allow_html=True)
+                        if h_decision == "RAS":
+                            st.markdown("<div class='ok-box'>✅ Rapport RAS généré et daté.</div>", unsafe_allow_html=True)
+                        elif h_decision == "RISQUE_CONFIRME":
+                            st.markdown("<div class='danger-box'>⚠️ Rapport RISQUE CONFIRMÉ généré.</div>", unsafe_allow_html=True)
                         else:
-                            st.markdown("<div class='ok-box'>✅ Rapport RAS généré.</div>", unsafe_allow_html=True)
+                            st.markdown("<div class='warn-box'>⏳ Rapport généré — validation en attente.</div>", unsafe_allow_html=True)
                     except Exception as e:
-                        st.error(f"Erreur génération PDF : {e}")
+                        st.error(f"Erreur PDF : {e}")
                         import traceback
                         st.code(traceback.format_exc())
 
-        with pdf_col2:
+        with pdf_c2:
+            decision_display = {
+                None:              ("⏳ En attente","#5a6a7a"),
+                "RAS":             ("✅ RAS — Rien à signaler","#00ff88"),
+                "RISQUE_CONFIRME": ("⚠️ Risque confirmé","#ff3366"),
+            }
+            d_label, d_color = decision_display.get(h_decision, ("—","#5a6a7a"))
             st.markdown(f"""<div class='metric-card'>
-            <div class='label'>Contenu du rapport PDF</div>
-            <div class='sub' style='margin-top:6px;line-height:1.8;'>
-            Score {score}/100 · Niveau {niveau} · Recommandation : {reco}<br>
-            {len(neg_n)} signal(aux) négatif(s) · Sanctions : {"Oui" if os_result.get("found") else "Non"}<br>
-            {nb_tot} sources interrogées · {nb_filt} mentions confirmées<br>
-            IBAN + banque {"✓" if iban_data.get("raw") else "—"} · Facteurs de risque détaillés
+            <div class='label'>Contenu du rapport</div>
+            <div class='sub' style='margin-top:6px;line-height:1.9;'>
+            Score {score}/100 · {niveau} · {reco}<br>
+            {len(neg_n)} signal(aux) · {nb_tot} sources · {nb_filt} mentions directes<br>
+            IBAN {" ✓" if iban_data.get("raw") else "—"} · {len(all_art)} articles listés<br>
+            <b style='color:{d_color};'>{d_label}</b>
+            {"<br><span style='color:#5a6a7a;font-size:0.78rem;'>" + (analyst_name or "Analyste non renseigné") + "</span>" if h_decision else ""}
             </div></div>""", unsafe_allow_html=True)
 
 
