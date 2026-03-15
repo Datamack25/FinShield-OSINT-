@@ -2,15 +2,19 @@
 streamlit>=1.32
 requests>=2.31
 beautifulsoup4>=4.12
-pandas>=2.0
 lxml>=4.9
+pandas>=2.0
 
-# ── PDF generation & manipulation ────────────────────────────────
+# ── PDF ───────────────────────────────────────────────────────────
 reportlab>=4.1
 pypdf>=4.0
 pdfplumber>=0.10
 Pillow>=10.0
 
+# ── LLM optionnel (boost gratuit) ─────────────────────────────────
+# Groq  : clé gratuite sur https://console.groq.com
+# Ollama: https://ollama.com puis : ollama pull llama3.2
+# (aucune clé requise pour le moteur local de base)
 # ── NO API KEY REQUIRED ──────────────────────────────────────────
 # Moteur d'analyse local 100% gratuit (mots-clés pondérés + scoring)
 # Sources interrogées : DuckDuckGo, Bing, OpenSanctions,
