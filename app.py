@@ -848,94 +848,147 @@ def search_web(query: str, num: int = 8) -> list:
 
 def build_search_queries(entity: str) -> list:
     """
-    Génère 60+ requêtes couvrant tous les pays / langues :
-    FR, EN, ES, PT, DE, IT, AR, ZH, RU + registres monde entier.
+    Génère 80+ requêtes exhaustives couvrant :
+    - 10+ langues (FR/EN/ES/PT/DE/IT/AR/ZH/RU/HT)
+    - Presse mondiale, réseaux sociaux, registres légaux, sanctions
+    - AUCUN FILTRE — tout remonter pour revue humaine
     """
     e = entity
-    queries = []
+    q = []
 
-    # ── FRANÇAIS ──────────────────────────────────────────────────
-    queries += [
+    # ── 1. RÉPUTATION / ADVERSE MEDIA ────────────────────────────
+    # FR
+    q += [
         f'"{e}" fraude arnaque escroquerie',
-        f'"{e}" condamné condamnation tribunal',
-        f'"{e}" mis en examen perquisition garde à vue',
-        f'"{e}" liquidation judiciaire redressement faillite',
-        f'"{e}" blanchiment financement du terrorisme',
-        f'"{e}" corruption détournement malversation',
+        f'"{e}" scandale affaire corruption',
+        f'"{e}" condamné tribunal jugement',
+        f'"{e}" mis en examen perquisition',
+        f'"{e}" liquidation judiciaire faillite',
+        f'"{e}" blanchiment financement terrorisme',
+        f'"{e}" détournement malversation abus',
         f'"{e}" sanction AMF ACPR interdiction',
-        f'"{e}" mise en cause plainte dépôt de plainte',
-        f'"{e}" faux usage de faux abus de confiance',
+        f'"{e}" plainte victime signalement',
         f'"{e}" interdit bancaire liste noire',
+        f'"{e}" mise en cause procès pénal',
+        f'"{e}" licenciement révocation démission forcée',
+        f'"{e}" controversé polémique affaire',
+        f'"{e}" arnaqueur escroc malhonnête',
+        f'"{e}" négatif problème risque alerte',
     ]
-    # ── ANGLAIS ───────────────────────────────────────────────────
-    queries += [
+    # EN
+    q += [
         f'"{e}" fraud scam money laundering',
-        f'"{e}" corruption bribery convicted sentenced prison',
+        f'"{e}" corruption bribery convicted sentenced',
         f'"{e}" sanctions blacklist OFAC banned',
         f'"{e}" criminal charges lawsuit indicted arrested',
-        f'"{e}" fraud warning alert exposed',
+        f'"{e}" scandal controversy warning alert',
         f'"{e}" Ponzi scheme embezzlement misappropriation',
-        f'"{e}" regulatory action enforcement penalty',
-        f'"{e}" terrorism financing terrorist',
+        f'"{e}" regulatory action penalty enforcement',
+        f'"{e}" terrorist financing terrorist links',
+        f'"{e}" fired dismissed misconduct',
+        f'"{e}" negative review complaint bad',
+        f'"{e}" exposed investigated whistleblower',
+        f'"{e}" default bankrupt insolvency',
     ]
-    # ── ESPAGNOL ──────────────────────────────────────────────────
-    queries += [
-        f'"{e}" fraude estafa corrupción condenado',
-        f'"{e}" blanqueo dinero sanción',
-        f'"{e}" detenido arrestado investigado',
+    # ES
+    q += [
+        f'"{e}" fraude estafa corrupción condenado detenido',
+        f'"{e}" blanqueo dinero sanción investigado',
+        f'"{e}" escándalo denuncia víctima alerta',
     ]
-    # ── PORTUGAIS ─────────────────────────────────────────────────
-    queries += [
+    # PT
+    q += [
         f'"{e}" fraude golpe corrupção preso condenado',
-        f'"{e}" lavagem dinheiro sanção',
+        f'"{e}" lavagem dinheiro sanção investigado',
+        f'"{e}" escândalo denúncia vítima',
     ]
-    # ── ALLEMAND ──────────────────────────────────────────────────
-    queries += [
+    # DE
+    q += [
         f'"{e}" Betrug Korruption verurteilt verhaftet',
-        f'"{e}" Geldwäsche Sanktion Strafe',
+        f'"{e}" Geldwäsche Sanktion Strafe Ermittlung',
+        f'"{e}" Skandal Beschwerde Warnung',
     ]
-    # ── ITALIEN ───────────────────────────────────────────────────
-    queries += [
+    # IT
+    q += [
         f'"{e}" truffa corruzione condannato arrestato',
-        f'"{e}" riciclaggio sanzione',
+        f'"{e}" riciclaggio sanzione indagato',
+        f'"{e}" scandalo denuncia vittima',
     ]
-    # ── ARABE ─────────────────────────────────────────────────────
-    queries += [
+    # AR
+    q += [
         f'"{e}" احتيال غسيل أموال فساد',
-        f'"{e}" عقوبات قائمة سوداء',
+        f'"{e}" عقوبات قائمة سوداء اعتقال',
+        f'"{e}" فضيحة شكوى ضحية تحقيق',
     ]
-    # ── RUSSE ─────────────────────────────────────────────────────
-    queries += [
+    # RU
+    q += [
         f'"{e}" мошенничество коррупция арест осуждён',
-        f'"{e}" санкции отмывание денег',
+        f'"{e}" санкции отмывание денег расследование',
+        f'"{e}" скандал жалоба предупреждение',
     ]
-    # ── RÉSEAUX SOCIAUX ───────────────────────────────────────────
-    queries += [
-        f'site:twitter.com "{e}" arnaque fraud scam warning',
+    # ZH
+    q += [
+        f'"{e}" 欺诈 洗钱 腐败 逮捕',
+        f'"{e}" 制裁 黑名单 调查',
+    ]
+    # HT (Haitian Creole)
+    q += [
+        f'"{e}" fwod eskrokri koripsyon',
+        f'"{e}" sanksyon nwa lis',
+    ]
+
+    # ── 2. SANCTIONS INTERNATIONALES ─────────────────────────────
+    q += [
+        f'site:opensanctions.org "{e}"',
+        f'site:ofac.treas.gov "{e}"',
+        f'site:sanctionsmap.eu "{e}"',
+        f'"{e}" EU UN OFAC SDN blacklist sanctioned',
+        f'site:acpr.banque-france.fr "{e}"',
+        f'site:amf-france.org "{e}"',
+        f'site:tracfin.gouv.fr "{e}"',
+        f'"{e}" Interpol red notice wanted fugitive',
+        f'"{e}" world-check dow-jones watchlist',
+        f'"{e}" PEP politically exposed person',
+        f'"{e}" transparency international corruption',
+    ]
+
+    # ── 3. RÉSEAUX SOCIAUX ────────────────────────────────────────
+    q += [
+        f'site:twitter.com "{e}"',
+        f'site:twitter.com "{e}" fraud scam arnaque warning',
         f'site:linkedin.com "{e}"',
-        f'site:facebook.com "{e}" arnaque plainte fraude',
-        f'site:reddit.com "{e}" scam fraud arnaque',
-        f'site:instagram.com "{e}" scam arnaque',
-        f'site:youtube.com "{e}" arnaque fraud',
+        f'site:facebook.com "{e}"',
+        f'site:facebook.com "{e}" arnaque fraude plainte',
+        f'site:instagram.com "{e}"',
+        f'site:reddit.com "{e}"',
+        f'site:reddit.com "{e}" scam fraud arnaque warning',
+        f'site:youtube.com "{e}"',
+        f'site:tiktok.com "{e}"',
+        f't.me "{e}" arnaque fraude',
+        f'site:telegram.org "{e}"',
     ]
-    # ── AVIS & NOTATIONS ──────────────────────────────────────────
-    queries += [
+
+    # ── 4. AVIS & NOTATIONS ───────────────────────────────────────
+    q += [
         f'site:trustpilot.com "{e}"',
         f'site:avis-verifies.com "{e}"',
         f'site:glassdoor.com "{e}"',
-        f'"{e}" avis client plainte mauvaise expérience victime',
-        f'"{e}" déconseillé arnaqueur témoignage',
+        f'site:google.com "{e}" avis note étoile',
+        f'"{e}" avis client plainte mauvaise expérience',
+        f'"{e}" déconseillé arnaqueur témoignage victime',
     ]
-    # ── SIGNALEMENTS ARNAQUES ──────────────────────────────────────
-    queries += [
+
+    # ── 5. SIGNALEMENTS & ARNAQUES ────────────────────────────────
+    q += [
         f'site:signal-arnaques.com "{e}"',
         f'site:cybermalveillance.gouv.fr "{e}"',
         f'site:escroqueries.fr "{e}"',
-        f'"{e}" arnaque signalé victime forum',
+        f'"{e}" arnaque signalé forum victime témoignage',
+        f'"{e}" scam reported forum victim',
     ]
-    # ── REGISTRES LÉGAUX MONDE ENTIER ─────────────────────────────
-    queries += [
-        # France
+
+    # ── 6. REGISTRES LÉGAUX & JUDICIAIRES ────────────────────────
+    q += [
         f'site:infogreffe.fr "{e}"',
         f'site:bodacc.fr "{e}"',
         f'site:pappers.fr "{e}"',
@@ -943,50 +996,44 @@ def build_search_queries(entity: str) -> list:
         f'site:verif.com "{e}"',
         f'site:legifrance.gouv.fr "{e}"',
         f'site:justice.fr "{e}"',
-        # International
+        f'site:courdecassation.fr "{e}"',
         f'site:companieshouse.gov.uk "{e}"',
         f'site:opencorporates.com "{e}"',
         f'site:sec.gov "{e}"',
         f'site:pacer.gov "{e}"',
-        f'"{e}" company registry incorporated',
-        f'"{e}" court records judgment filed',
+        f'"{e}" court records judgment filed convicted',
+        f'"{e}" tribunal commercial pénal correctionnel',
     ]
-    # ── SANCTIONS INTERNATIONALES ─────────────────────────────────
-    queries += [
-        f'site:opensanctions.org "{e}"',
-        f'site:ofac.treas.gov "{e}"',
-        f'site:sanctionsmap.eu "{e}"',
-        f'site:un.org/sc/suborg/en/sanctions "{e}"',
-        f'site:amf-france.org "{e}"',
-        f'site:acpr.banque-france.fr "{e}"',
-        f'"{e}" EU UN OFAC SDN sanctioned blacklisted',
-        f'"{e}" Interpol red notice wanted',
-    ]
-    # ── PRESSE MONDIALE ───────────────────────────────────────────
-    queries += [
+
+    # ── 7. PRESSE MONDIALE ────────────────────────────────────────
+    q += [
+        f'site:lemonde.fr "{e}"',
+        f'site:lefigaro.fr "{e}"',
+        f'site:bfmtv.com "{e}"',
+        f'site:lesechos.fr "{e}"',
+        f'site:latribune.fr "{e}"',
         f'site:reuters.com "{e}"',
         f'site:bloomberg.com "{e}"',
         f'site:ft.com "{e}"',
         f'site:bbc.com "{e}"',
         f'site:theguardian.com "{e}"',
-        f'site:lemonde.fr "{e}"',
-        f'site:lesechos.fr "{e}"',
-        f'site:bfmtv.com "{e}"',
-        f'site:latribune.fr "{e}"',
+        f'site:nytimes.com "{e}"',
         f'site:spiegel.de "{e}"',
         f'site:elpais.com "{e}"',
+        f'site:aljazeera.com "{e}"',
+        f'site:africanews.com "{e}"',
     ]
 
-    return queries
+    return q
 
 
-def scrape_page(url: str, max_chars=3000) -> str:
+def scrape_page(url: str, max_chars=4000) -> str:
     try:
         from bs4 import BeautifulSoup
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, timeout=8, allow_redirects=True)
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+        r = requests.get(url, headers={"User-Agent": ua}, timeout=10, allow_redirects=True)
         soup = BeautifulSoup(r.text, "html.parser")
-        for tag in soup(["script","style","nav","footer","header","aside"]):
+        for tag in soup(["script","style","nav","footer","header","aside","iframe"]):
             tag.decompose()
         return soup.get_text(" ", strip=True)[:max_chars]
     except:
@@ -994,158 +1041,120 @@ def scrape_page(url: str, max_chars=3000) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════
-# KEYWORD-BASED RISK ENGINE — multilingue (FR/EN/ES/PT/DE/IT/AR/ZH/RU)
+# KEYWORD ENGINE — multilingue 10 langues, ZÉRO FILTRE PAR DÉFAUT
 # ══════════════════════════════════════════════════════════════════
+
+# Poids 1-5. Catégories : sanctions, fraud, judicial, reputation, pep, positive
 RISK_KEYWORDS = {
     "sanctions": {
-        # FR
-        "sanction":5,"sanctionné":5,"sanctions":5,"ofac":5,"gel des avoirs":5,
+        "sanction":4,"sanctionné":5,"sanctions":4,"ofac":5,"gel des avoirs":5,
         "liste noire":5,"blacklist":5,"embargo":4,"liste ue":4,"liste onu":4,
-        "seco":4,"amf sanction":5,"acpr sanction":5,"interdiction bancaire":5,
-        "interdit bancaire":4,"interdiction d exercer":5,
-        # EN
+        "seco":4,"amf sanction":5,"acpr sanction":5,"tracfin":4,
+        "interdiction bancaire":5,"interdit bancaire":4,"interdiction d exercer":5,
         "sanctioned":5,"blacklisted":5,"ofac list":5,"sdn list":5,
         "eu sanctions":4,"un sanctions":4,"asset freeze":5,"travel ban":4,
-        "debarred":4,"banned":4,"restricted":3,
-        # ES/PT
-        "sancionado":4,"lista negra":4,"embargo":4,"vetado":4,
-        # DE/IT
+        "debarred":4,"banned":4,"restricted party":4,
+        "sancionado":4,"lista negra":4,"vetado":4,
         "sanktioniert":4,"schwarze liste":4,"sanzionato":4,
-        # AR
-        "عقوبات":5,"قائمة سوداء":5,"تجميد":4,
-        # RU
+        "عقوبات":5,"قائمة سوداء":5,"تجميد":4,"حظر":4,
         "санкции":5,"чёрный список":5,"заморозка":4,
+        "制裁":5,"黑名单":5,
+        "sanksyon":4,"lis nwa":4,
     },
     "fraud": {
-        # FR
-        "fraude":5,"frauduleux":5,"escroquerie":5,"arnaque":4,
+        "fraude":4,"frauduleux":5,"escroquerie":5,"arnaque":4,
         "abus de confiance":5,"détournement":5,"malversation":5,
         "falsification":4,"faux et usage de faux":5,"corruption":5,
-        "pot-de-vin":5,"blanchiment":5,"blanchiment d argent":5,
-        "financement du terrorisme":5,"financement terrorisme":5,
-        "abus de biens sociaux":4,"tromperie":3,"publicité mensongère":2,
-        "pratiques commerciales trompeuses":3,"abus de position dominante":3,
-        # EN
-        "fraud":5,"fraudulent":5,"scam":4,"embezzlement":5,
-        "money laundering":5,"bribery":5,"corruption":5,"forgery":4,
-        "misappropriation":5,"terrorist financing":5,"ponzi":5,
+        "pot-de-vin":5,"blanchiment":5,"financement du terrorisme":5,
+        "financement terrorisme":5,"abus de biens sociaux":4,
+        "tromperie":3,"pratiques trompeuses":3,"ponzi":5,
+        "escroquerie financière":5,"fraude fiscale":5,
+        "fraud":4,"fraudulent":5,"scam":4,"embezzlement":5,
+        "money laundering":5,"bribery":5,"forgery":4,
+        "misappropriation":5,"terrorist financing":5,
         "racketeering":5,"extortion":4,"counterfeiting":4,
-        # ES
-        "fraude":5,"estafa":5,"corrupción":5,"blanqueo":5,
-        "malversación":5,"soborno":4,"falsificación":4,
-        # PT
-        "fraude":5,"golpe":4,"corrupção":5,"lavagem":5,"suborno":4,
-        # DE
+        "tax fraud":5,"insider trading":5,"market manipulation":5,
+        "fraude":4,"estafa":5,"corrupción":5,"blanqueo":5,
+        "malversación":5,"soborno":4,"evasión fiscal":5,
+        "fraude":4,"golpe":4,"corrupção":5,"lavagem":5,"suborno":4,
         "betrug":5,"korruption":5,"geldwäsche":5,"bestechung":4,
-        "veruntreuung":5,"fälschung":4,
-        # IT
+        "steuerhinterziehung":5,"veruntreuung":5,
         "truffa":5,"corruzione":5,"riciclaggio":5,"frode":5,
-        "peculato":5,"falsificazione":4,
-        # AR
-        "احتيال":5,"غسيل الأموال":5,"فساد":5,"رشوة":4,"تزوير":4,
-        # RU
-        "мошенничество":5,"коррупция":5,"отмывание":5,
-        "взяточничество":4,"фальсификация":4,
-        # ZH
+        "احتيال":5,"غسيل الأموال":5,"فساد":5,"رشوة":4,"تهرب ضريبي":4,
+        "مошенничество":5,"коррупция":5,"отмывание":5,"взяточничество":4,
         "欺诈":5,"洗钱":5,"腐败":5,"贿赂":4,
+        "fwod":4,"eskrokri":4,"koripsyon":4,
     },
     "judicial": {
-        # FR
         "condamné":5,"condamnation":5,"mis en examen":4,"garde à vue":3,
         "perquisition":3,"liquidation judiciaire":4,"redressement judiciaire":4,
         "faillite":4,"procédure collective":4,"tribunal correctionnel":4,
-        "tribunal de commerce":3,"jugement":3,"plainte":3,
-        "dépôt de bilan":4,"dissolution":3,"peine de prison":5,
-        "incarcéré":5,"inculpé":4,"mise en cause":3,"procès":3,
-        "arrêté":3,"interpellé":3,"mandat d arrêt":5,"détention":4,
-        # EN
+        "jugement":3,"plainte":3,"dépôt de bilan":4,"peine de prison":5,
+        "incarcéré":5,"inculpé":4,"procès":3,"arrêté":3,"interpellé":3,
+        "mandat d arrêt":5,"détention provisoire":4,"renvoi en jugement":4,
         "convicted":5,"conviction":5,"indicted":4,"arrested":4,
         "imprisoned":5,"bankruptcy":4,"liquidation":4,"sued":3,
-        "lawsuit":3,"court ruling":3,"criminal charges":5,
-        "plea guilty":5,"sentenced":5,"warrant":4,"detained":4,
-        "extradited":5,"deported":4,"defaulted":3,
-        # ES
-        "condenado":5,"arrestado":4,"investigado":3,"demanda":3,
-        "quiebra":4,"imputado":4,"detenido":4,
-        # PT
-        "condenado":5,"preso":5,"investigado":3,"falência":4,
-        "indiciado":4,"detido":4,
-        # DE
+        "lawsuit":3,"criminal charges":5,"plea guilty":5,"sentenced":5,
+        "warrant":4,"detained":4,"extradited":5,"default judgment":4,
+        "condenado":5,"arrestado":4,"investigado":3,"quiebra":4,
+        "imputado":4,"detenido":4,"preso":5,"indiciado":4,
         "verurteilt":5,"verhaftet":4,"angeklagt":4,"insolvenz":4,
-        "ermittlung":3,"haftbefehl":5,
-        # IT
+        "haftbefehl":5,"ermittlung":3,
         "condannato":5,"arrestato":4,"indagato":3,"fallimento":4,
-        "imputato":4,"detenuto":4,
-        # AR
         "مدان":5,"معتقل":4,"محقق":3,"إفلاس":4,"اعتقال":4,
-        # RU
-        "осуждён":5,"арестован":4,"обвиняемый":4,"банкротство":4,
-        "задержан":3,"обыск":3,
+        "осуждён":5,"арестован":4,"банкротство":4,"задержан":3,
+        "定罪":5,"逮捕":4,"破产":4,"调查":3,
     },
     "reputation": {
-        # FR
         "arnaqueur":4,"escroc":4,"mauvais payeur":3,"litige client":2,
-        "plainte client":3,"très mauvais":2,"déconseillé":2,
-        "méfiez-vous":3,"alerte":3,"avertissement":3,"mise en garde":3,
-        "signalement":3,"dénonciation":3,"victime":2,
-        # EN
-        "scammer":4,"bad reviews":2,"complaint":2,"warning":3,
-        "alert":3,"avoid":2,"do not trust":3,"rip off":3,
-        "victim":2,"dishonest":3,"untrustworthy":3,
-        # ES
-        "estafador":4,"queja":2,"advertencia":3,"víctima":2,
-        # PT
-        "golpista":4,"reclamação":2,"alerta":3,"vítima":2,
+        "plainte client":3,"très mauvais":2,"déconseillé":3,
+        "méfiez-vous":3,"alerte":2,"avertissement":2,"mise en garde":3,
+        "signalement":2,"victime":2,"scandale":4,"polémique":3,
+        "controversé":3,"dénonciation":3,"incompétent":2,
+        "scammer":4,"bad reviews":2,"complaint":2,"warning":2,
+        "alert":2,"avoid":2,"rip off":3,"victim":2,"dishonest":3,
+        "unreliable":2,"unprofessional":2,"scandal":4,"controversy":3,
+        "estafador":4,"queja":2,"advertencia":2,"víctima":2,
+        "شكوى":3,"ضحية":2,"تحذير":2,"احتيالي":4,
+        "жалоба":2,"предупреждение":2,"мошенник":4,
+        "骗子":4,"投诉":2,"警告":2,
     },
     "pep": {
-        # FR
-        "personnalité politique":3,"personnage politiquement exposé":4,"pep":3,
-        "ministre":3,"député":3,"sénateur":3,"préfet":3,"ambassadeur":3,
-        "haut fonctionnaire":3,"magistrat":3,"élu":2,
-        # EN
-        "politically exposed":4,"politician":3,"minister":3,
-        "senator":3,"ambassador":3,"official":2,"government":2,
-        # ES/PT
-        "político":3,"ministro":3,"senador":3,"funcionario":2,
-        # AR
-        "سياسي":3,"وزير":3,"مسؤول":2,
-        # RU
-        "политик":3,"министр":3,"чиновник":2,
+        "personnalité politique":3,"pep":2,"personne exposée":3,
+        "ministre":2,"député":2,"sénateur":2,"préfet":2,"ambassadeur":3,
+        "haut fonctionnaire":3,"magistrat":3,"élu":2,"dirigeant état":3,
+        "politically exposed":4,"politician":2,"minister":2,
+        "senator":2,"ambassador":3,"public official":2,"government":1,
+        "político":2,"ministro":2,"funcionario":2,
+        "سياسي":2,"وزير":2,"مسؤول":2,
+        "политик":2,"министр":2,"чиновник":2,
+        "政客":2,"部长":2,
     },
     "positive": {
-        # FR
-        "agréé":2,"accrédité":2,"certifié":2,"récompensé":2,"fiable":2,
-        "reconnu":1,"bien noté":2,"recommandé":2,"régulé":2,"conforme":2,
-        # EN
-        "accredited":2,"certified":2,"award":1,"trusted":2,"reliable":2,
-        "regulated":2,"licensed":2,"compliant":2,"reputable":2,
-        # ES/PT
-        "certificado":2,"acreditado":2,"regulado":2,"confiable":2,
+        "agréé":2,"accrédité":2,"certifié":2,"récompensé":2,
+        "fiable":2,"reconnu":1,"régulé":2,"conforme":2,
+        "accredited":2,"certified":2,"trusted":2,"regulated":2,
+        "licensed":2,"compliant":2,"reputable":2,
     },
 }
 
 SOURCE_CREDIBILITY = {
-    # Presse FR
     "lemonde.fr":1.5,"lefigaro.fr":1.5,"liberation.fr":1.3,"bfmtv.com":1.3,
     "franceinfo.fr":1.4,"latribune.fr":1.4,"lesechos.fr":1.5,"capital.fr":1.3,
-    "challenges.fr":1.3,"leparisien.fr":1.3,"20minutes.fr":1.1,
-    # Presse internationale
+    "leparisien.fr":1.3,"challenges.fr":1.3,"20minutes.fr":1.1,
     "reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,"wsj.com":1.5,
     "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,
-    "spiegel.de":1.4,"elpais.com":1.4,"corriere.it":1.3,
-    # Régulateurs / justice
+    "spiegel.de":1.4,"elpais.com":1.4,"aljazeera.com":1.3,
     "opensanctions.org":2.0,"legifrance.gouv.fr":2.0,"justice.fr":2.0,
     "bodacc.fr":1.8,"infogreffe.fr":1.8,"amf-france.org":2.0,
     "acpr.banque-france.fr":2.0,"interpol.int":2.0,"europol.europa.eu":2.0,
-    "tracfin.gouv.fr":2.0,"tribunal.fr":1.8,"courdecassation.fr":1.9,
-    "sec.gov":2.0,"ofac.treas.gov":2.0,"pacer.gov":1.8,
-    "companieshouse.gov.uk":1.7,"opencorporates.com":1.5,
-    "pappers.fr":1.6,"societe.com":1.4,"verif.com":1.3,
-    # Avis
-    "trustpilot.com":1.1,"avis-verifies.com":1.0,"glassdoor.com":1.0,
-    # Arnaques
+    "tracfin.gouv.fr":2.0,"courdecassation.fr":1.9,"sec.gov":2.0,
+    "ofac.treas.gov":2.0,"pacer.gov":1.8,"companieshouse.gov.uk":1.7,
+    "opencorporates.com":1.5,"pappers.fr":1.6,"societe.com":1.4,
+    "trustpilot.com":1.2,"avis-verifies.com":1.1,"glassdoor.com":1.1,
     "signal-arnaques.com":1.5,"cybermalveillance.gouv.fr":1.8,
-    "escroqueries.fr":1.4,
+    "twitter.com":1.0,"linkedin.com":1.0,"reddit.com":1.0,
+    "facebook.com":0.9,"instagram.com":0.8,"youtube.com":0.9,
 }
 
 def _text_lower(s): return s.lower() if s else ""
@@ -1154,12 +1163,17 @@ def _text_lower(s): return s.lower() if s else ""
 def analyze_local(entity: str, search_results: list, scraped_texts: list,
                   os_result: dict, filter_level: int = 0) -> dict:
     """
-    Moteur multilingue. filter_level 0-10 :
-      0   = aucun filtre (tout remonte pour revue humaine)
+    Moteur OSINT multilingue.
+
+    filter_level 0-10 :
+      0   = ZÉRO FILTRE — tout remonter (recommandé, humain décide)
       1-3 = entité présente dans la source
       4-6 = entité dans ±400 chars du mot-clé
       7-9 = entité dans ±180 chars
       10  = entité dans ±60 chars (extrême)
+
+    RÈGLE : à FL=0 tous les articles avec mots-clés négatifs sont remontés,
+    même sans mention directe de l entité. C est VOULU.
     """
     require_entity_in_source = (filter_level >= 1)
     if filter_level == 0:
@@ -1173,10 +1187,11 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
     else:
         proximity_window = 60
 
-    min_neg_score = max(0.3, filter_level * 0.25)
+    # Seuil minimum pour signaler : TRÈS BAS pour ne rien rater
+    min_neg_score = max(0.5, filter_level * 0.3)
 
-    entity_low   = entity.lower().strip()
-    entity_words = [w for w in entity_low.split() if len(w) >= 3]
+    entity_low    = entity.lower().strip()
+    entity_words  = [w for w in entity_low.split() if len(w) >= 3]
     entity_tokens = list(set([entity_low] + entity_words))
     if len(entity_words) >= 2:
         entity_tokens.append(entity_words[0])
@@ -1188,38 +1203,51 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
 
     def entity_near_kw(txt_low: str, kw_idx: int) -> bool:
         if proximity_window is None:
-            return True
+            return True   # FL=0 : toujours vrai, tout remonter
         ctx = txt_low[max(0, kw_idx - proximity_window): kw_idx + proximity_window + len(entity_low)]
         return any(tok in ctx for tok in entity_tokens)
 
-    scores_by_cat = {k: 0.0 for k in RISK_KEYWORDS}
-    negative_news = []
-    all_articles  = []   # TOUS les articles pour revue humaine
+    scores_by_cat    = {k: 0.0 for k in RISK_KEYWORDS}
+    negative_news    = []
+    all_articles     = []   # TOUS les articles pour revue humaine
     all_text_sources = []
 
-    # Build source list
+    nature_map = {
+        "sanctions":"Sanction / Liste noire",
+        "fraud":    "Fraude / Corruption",
+        "judicial": "Litige judiciaire",
+        "reputation":"Réputation négative",
+        "pep":      "Exposition PEP",
+    }
+
+    # ── Construire sources ──────────────────────────────────────────
     for r in search_results:
         combined = f"{r.get('title','')} {r.get('snippet','')}".strip()
         if not combined:
             continue
         domain = urlparse(r.get("url","")).netloc.replace("www.","")
         cred   = SOURCE_CREDIBILITY.get(domain, 1.0)
-        entity_found = entity_present(combined)
+        ent_found = entity_present(combined)
 
-        # Store ALL articles for human review
+        # Stocker TOUS les articles pour revue humaine
         all_articles.append({
-            "title":   r.get("title",""),
-            "url":     r.get("url",""),
-            "snippet": r.get("snippet",""),
-            "domain":  domain,
-            "entity_mentioned": entity_found,
+            "title":            r.get("title",""),
+            "url":              r.get("url",""),
+            "snippet":          r.get("snippet",""),
+            "domain":           domain,
+            "entity_mentioned": ent_found,
         })
 
-        if require_entity_in_source and not entity_found:
+        # Filtre source si demandé
+        if require_entity_in_source and not ent_found:
             continue
+
         all_text_sources.append({
-            "text": combined, "title": r.get("title",""),
-            "url": r.get("url",""), "domain": domain, "cred": cred,
+            "text":   combined,
+            "title":  r.get("title",""),
+            "url":    r.get("url",""),
+            "domain": domain,
+            "cred":   cred,
         })
 
     for t in scraped_texts:
@@ -1228,15 +1256,10 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
         if require_entity_in_source and not entity_present(t):
             continue
         all_text_sources.append({
-            "text": t, "title": "", "url": "", "domain": "", "cred": 1.0,
+            "text": t, "title":"", "url":"", "domain":"", "cred":1.0,
         })
 
-    # Scoring
-    nature_map = {
-        "sanctions":"Sanction / Liste noire", "fraud":"Fraude / Corruption",
-        "judicial":"Litige judiciaire",       "reputation":"Réputation négative",
-        "pep":"Exposition PEP"
-    }
+    # ── Scoring ─────────────────────────────────────────────────────
     for src in all_text_sources:
         txt_low = src["text"].lower()
         for cat, kws in RISK_KEYWORDS.items():
@@ -1254,7 +1277,7 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
             if cat != "positive" and cat_hits and src.get("title"):
                 neg_score = sum(w for _, w in cat_hits)
                 if neg_score >= min_neg_score:
-                    gravite = "eleve" if neg_score >= 7 else ("moyen" if neg_score >= 4 else "faible")
+                    gravite = "eleve" if neg_score >= 8 else ("moyen" if neg_score >= 4 else "faible")
                     negative_news.append({
                         "titre":      src["title"][:120],
                         "source":     src.get("domain",""),
@@ -1267,7 +1290,7 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
                         "cat":        cat,
                     })
 
-    # Deduplicate negative_news
+    # Dédoublonner — garder TOUS les articles distincts
     seen_titles, neg_dedup = set(), []
     for n in sorted(negative_news, key=lambda x: x["score_brut"], reverse=True):
         key = n["titre"][:45].lower()
@@ -1275,87 +1298,96 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
             seen_titles.add(key)
             neg_dedup.append(n)
 
+    # OpenSanctions pèse lourd
     if os_result.get("found"):
         scores_by_cat["sanctions"] += os_result["count"] * 12
 
+    # Score final
     raw = (
         scores_by_cat["sanctions"] * 3.0 +
         scores_by_cat["fraud"]     * 2.5 +
         scores_by_cat["judicial"]  * 2.0 +
-        scores_by_cat["reputation"]* 1.2 +
-        scores_by_cat["pep"]       * 0.8
+        scores_by_cat["reputation"]* 1.5 +
+        scores_by_cat["pep"]       * 1.0
     )
-    positive_offset = scores_by_cat["positive"] * 2.5
-    score = min(100, max(0, int(raw * 1.8 - positive_offset)))
+    positive_offset = scores_by_cat["positive"] * 2.0
+    score = min(100, max(0, int(raw * 2.0 - positive_offset)))
 
     if score >= 70:    niveau = "CRITIQUE"
     elif score >= 45:  niveau = "ELEVE"
-    elif score >= 20:  niveau = "MODERE"
+    elif score >= 15:  niveau = "MODERE"
     else:              niveau = "FAIBLE"
 
-    if score >= 60 or os_result.get("found") or scores_by_cat["sanctions"] > 8:
+    # Recommandation — seuil BAS pour tout signaler
+    if score >= 50 or os_result.get("found") or scores_by_cat["sanctions"] > 5:
         reco = "REFUSER"
-    elif score >= 25 or len(neg_dedup) >= 2:
+    elif score >= 10 or len(neg_dedup) >= 1:
         reco = "VIGILANCE_RENFORCEE"
     else:
         reco = "ACCEPTER"
 
-    sanctions_trouve  = os_result.get("found", False) or scores_by_cat["sanctions"] > 5
+    # Flags
+    sanctions_trouve  = os_result.get("found",False) or scores_by_cat["sanctions"] > 3
     sanctions_details = ""
     if os_result.get("found"):
         sanctions_details = f"{os_result['count']} résultat(s) OpenSanctions : " + \
             ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
-    elif scores_by_cat["sanctions"] > 5:
+    elif scores_by_cat["sanctions"] > 3:
         kws_f = set(kw for src in all_text_sources
                     for kw in RISK_KEYWORDS["sanctions"] if kw in src["text"].lower())
-        sanctions_details = "Indicateurs : " + ", ".join(list(kws_f)[:5])
+        sanctions_details = "Indicateurs détectés : " + ", ".join(list(kws_f)[:6])
 
-    litiges_trouve  = scores_by_cat["judicial"] > 4
+    litiges_trouve  = scores_by_cat["judicial"] > 2
     litiges_details = ""
     if litiges_trouve:
         kws_j = set(kw for src in all_text_sources
                     for kw in RISK_KEYWORDS["judicial"] if kw in src["text"].lower())
         litiges_details = "Indicateurs : " + ", ".join(list(kws_j)[:6])
 
-    pep_trouve  = scores_by_cat["pep"] > 3
-    pep_details = "Exposition potentielle à des personnes politiquement exposées." if pep_trouve else ""
+    pep_trouve  = scores_by_cat["pep"] > 2
+    pep_details = "Indicateurs PEP détectés — vérification requise." if pep_trouve else ""
 
     rep_score = scores_by_cat["reputation"]
     pos_score = scores_by_cat["positive"]
-    if rep_score > pos_score * 1.5:
-        rep_notations = f"Réputation dégradée (négatif:{round(rep_score,1)} / positif:{round(pos_score,1)})"
-    elif pos_score > rep_score * 1.5:
-        rep_notations = f"Réputation globalement positive (positif:{round(pos_score,1)})"
+    if rep_score > pos_score:
+        rep_notations = f"Réputation dégradée (score négatif:{round(rep_score,1)} / positif:{round(pos_score,1)})"
+    elif pos_score > rep_score * 2:
+        rep_notations = f"Réputation globalement positive (score:{round(pos_score,1)})"
     else:
         rep_notations = "Réputation neutre ou insuffisamment documentée."
 
-    nb_neg     = len(neg_dedup)
-    src_count  = len(all_text_sources)
-    nb_total   = len(search_results)
+    nb_neg    = len(neg_dedup)
+    src_count = len(all_text_sources)
+    nb_total  = len(search_results)
+    fl_label  = {0:"Aucun (tout remonter)",1:"Très léger",2:"Léger",3:"Léger+",
+                 4:"Modéré",5:"Modéré+",6:"Modéré++",
+                 7:"Strict",8:"Strict+",9:"Très strict",10:"Extrême"}.get(filter_level,"")
 
-    resume_parts = [f"Screening de {nb_total} résultats ({src_count} analysés)."]
+    resume_parts = [
+        f"Screening de {nb_total} résultats ({src_count} analysés, filtre niveau {filter_level} — {fl_label})."
+    ]
     if nb_neg:
-        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) détecté(s) pour {entity}.")
+        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) détecté(s). Revue humaine requise.")
     else:
-        resume_parts.append(f"Aucun signal négatif significatif pour {entity}.")
+        resume_parts.append("Aucun signal négatif détecté sur les sources retournées par les moteurs de recherche.")
     if sanctions_trouve:
-        resume_parts.append("⚠️ Indicateurs de sanctions détectés.")
-    elif score < 20:
-        resume_parts.append("Profil de risque faible.")
+        resume_parts.append("⚠️ Indicateurs de sanctions ou restrictions détectés.")
 
     aggravants, attenuants = [], []
     if os_result.get("found"):
         aggravants.append(f"{os_result['count']} entrée(s) OpenSanctions confirmée(s)")
-    if scores_by_cat["fraud"] > 5:
-        aggravants.append(f"Mots-clés fraude/corruption (score:{round(scores_by_cat['fraud'],1)})")
-    if scores_by_cat["judicial"] > 4:
-        aggravants.append(f"Indicateurs procédures judiciaires (score:{round(scores_by_cat['judicial'],1)})")
+    if scores_by_cat["fraud"] > 3:
+        aggravants.append(f"Signaux fraude/corruption détectés (score:{round(scores_by_cat['fraud'],1)})")
+    if scores_by_cat["judicial"] > 2:
+        aggravants.append(f"Signaux procédures judiciaires (score:{round(scores_by_cat['judicial'],1)})")
+    if scores_by_cat["sanctions"] > 3:
+        aggravants.append(f"Signaux sanctions/listes (score:{round(scores_by_cat['sanctions'],1)})")
     if nb_neg >= 3:
-        aggravants.append(f"{nb_neg} actualités négatives détectées")
+        aggravants.append(f"{nb_neg} articles avec signaux négatifs listés pour revue")
     if pos_score > 4:
         attenuants.append(f"Signaux positifs détectés (score:{round(pos_score,1)})")
     if nb_neg == 0 and not os_result.get("found"):
-        attenuants.append("Aucun signal négatif significatif détecté")
+        attenuants.append("Aucun signal négatif dans les sources retournées")
     if scores_by_cat["sanctions"] == 0:
         attenuants.append("Absent des bases de sanctions consultées")
 
@@ -1365,8 +1397,8 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
         "score_risque":        score,
         "niveau_risque":       niveau,
         "resume_executif":     " ".join(resume_parts),
-        "negative_news":       neg_dedup[:20],
-        "all_articles":        all_articles,       # TOUS pour revue humaine
+        "negative_news":       neg_dedup[:30],   # jusqu à 30 signaux
+        "all_articles":        all_articles,
         "sanctions":           {"trouve": sanctions_trouve,  "details": sanctions_details},
         "litiges_judiciaires": {"trouve": litiges_trouve,    "details": litiges_details},
         "pep_exposure":        {"trouve": pep_trouve,        "details": pep_details},
@@ -1374,13 +1406,13 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
         "facteurs_aggravants": aggravants,
         "facteurs_attenuants": attenuants,
         "recommandation":      reco,
-        "sources_consultees":  list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:25],
+        "sources_consultees":  list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:30],
         "confiance_analyse":   confidence,
-        "scores_categories":   {k: round(v, 1) for k, v in scores_by_cat.items()},
+        "scores_categories":   {k: round(v,1) for k,v in scores_by_cat.items()},
         "nb_sources_filtrees": src_count,
         "nb_sources_total":    nb_total,
         "filter_level_used":   filter_level,
-        "moteur":              "local_multilang_v4",
+        "moteur":              "local_multilang_v5_no_filter",
     }
 
 
@@ -1392,16 +1424,17 @@ def analyze_with_groq(entity, search_results, scraped_texts, groq_key) -> dict:
     for i, t in enumerate(scraped_texts[:3]):
         if t.strip():
             ctx.append(f"[P{i+1}] {t[:600]}")
-    prompt = f"""Tu es un analyste KYC/AML expert. Entité: «{entity}»
-Sources OSINT:
+    prompt = f"""Tu es un analyste KYC/AML/LCB-FT expert. Entite: {entity}
+Sources OSINT collectees:
 {chr(10).join(ctx)}
-Réponds UNIQUEMENT avec ce JSON (aucun texte autour):
+REGLE STRICTE: retenir TOUS les elements negatifs meme non confirmes.
+Reponds UNIQUEMENT avec ce JSON:
 {{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[{{"titre":"","source":"","date":"","nature":"","gravite":"faible","url":""}}],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","confiance_analyse":"MOYENNE"}}"""
     try:
         r = requests.post("https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
             json={"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":prompt}],
-                  "max_tokens":1800,"temperature":0.1}, timeout=30)
+                  "max_tokens":2000,"temperature":0.1}, timeout=30)
         if r.status_code == 200:
             raw = r.json()["choices"][0]["message"]["content"].strip()
             raw = re.sub(r'^```json\s*','',raw); raw = re.sub(r'\s*```$','',raw)
@@ -1413,11 +1446,9 @@ Réponds UNIQUEMENT avec ce JSON (aucun texte autour):
 
 
 def analyze_with_ollama(entity, search_results, scraped_texts) -> dict:
-    """Ollama local — 100% privé, aucune donnée envoyée."""
     ctx = [f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:150]}"
            for i, sr in enumerate(search_results[:10])]
-    prompt = f"""Analyste KYC. Entité: «{entity}»\nSources: {chr(10).join(ctx)}
-Réponds UNIQUEMENT en JSON: {{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","confiance_analyse":"MOYENNE"}}"""
+    prompt = f"Analyste KYC. Entite: {entity}\nSources: {chr(10).join(ctx)}\nReponds JSON uniquement."
     try:
         r = requests.post("http://localhost:11434/api/generate",
             json={"model":"llama3.2","prompt":prompt,"stream":False}, timeout=60)
@@ -1701,8 +1732,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown("""<div style='font-size:0.72rem;color:#5a6a7a;line-height:1.8;margin-bottom:8px;'>
-    <b style='color:#00ff88;'>✅ Moteur local actif — aucune API requise</b><br>
-    Analyse par mots-clés pondérés, scoring multi-catégories, 100% gratuit.
+    <b style='color:#00ff88;'>✅ Moteur OSINT v5 — zéro filtre par défaut</b><br>
+    Tout remonter · 10 langues · 80+ sources · revue humaine.
     </div>""", unsafe_allow_html=True)
 
     with st.expander("⚡ Booster avec un LLM gratuit (optionnel)"):
@@ -1885,7 +1916,7 @@ with tab2:
             <span style='color:#ffcc00;'>5</span> = équilibré &nbsp;·&nbsp;
             <span style='color:#ff3366;'>10</span> = extrême (entité dans ±60 chars du mot-clé)
             </div>""", unsafe_allow_html=True)
-            filter_level = st.slider("Filtrage", min_value=0, max_value=10, value=3,
+            filter_level = st.slider("Filtrage", min_value=0, max_value=10, value=0,
                                       key="filter_slider",
                                       help="0 = aucun filtre · 3 = légèrement filtré (défaut) · 7 = strict · 10 = extrême")
             filter_labels = {0:"Aucun filtre",1:"Très léger",2:"Léger",3:"Léger+",
@@ -1995,13 +2026,16 @@ with tab2:
         score  = analysis.get("score_risque", 0)
         niveau = analysis.get("niveau_risque","FAIBLE")
         neg_n  = analysis.get("negative_news",[])
+        # Seuil BAS — tout remonter pour revue humaine
         has_risk = (
-            score >= 20
-            or os_result.get("found")
-            or analysis.get("sanctions",{}).get("trouve")
-            or analysis.get("litiges_judiciaires",{}).get("trouve")
-            or len(neg_n) >= 2
-            or niveau in ("ELEVE","CRITIQUE")
+            score >= 5                                          # quasi tout
+            or os_result.get("found")                          # sanctions confirmées
+            or analysis.get("sanctions",{}).get("trouve")      # signaux sanctions
+            or analysis.get("litiges_judiciaires",{}).get("trouve")  # litiges
+            or analysis.get("pep_exposure",{}).get("trouve")   # PEP
+            or len(neg_n) >= 1                                 # UN seul signal suffit
+            or niveau in ("MODERE","ELEVE","CRITIQUE")
+            or reco in ("VIGILANCE_RENFORCEE","REFUSER")
         )
         st.session_state["osint_analysis"]  = analysis
         st.session_state["osint_entity"]    = entity_input.strip()
