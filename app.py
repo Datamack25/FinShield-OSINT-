@@ -811,226 +811,227 @@ def check_opensanctions(name: str) -> dict:
     return {"found": False, "count": 0, "results": [], "error": "Non disponible"}
 
 def search_web(query: str, num: int = 8) -> list:
-    """Search via DuckDuckGo (primary) + Bing (fallback)."""
+    """DuckDuckGo primary, Bing fallback."""
     from bs4 import BeautifulSoup
-    results = []
     ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
-    # DuckDuckGo HTML
+    results = []
     try:
         r = requests.get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",
-                         headers={"User-Agent": ua}, timeout=10)
+                         headers={"User-Agent": ua}, timeout=12)
         soup = BeautifulSoup(r.text, "html.parser")
         for item in soup.select(".result")[:num]:
-            a = item.find("a", class_="result__a")
+            a    = item.find("a", class_="result__a")
             snip = item.find("a", class_="result__snippet")
             if a and a.get("href","").startswith("http"):
-                results.append({"title": a.get_text(strip=True),
-                                 "url": a.get("href",""),
-                                 "snippet": snip.get_text(strip=True) if snip else ""})
+                results.append({
+                    "title":   a.get_text(strip=True),
+                    "url":     a.get("href",""),
+                    "snippet": snip.get_text(strip=True) if snip else "",
+                })
     except: pass
-    # Bing fallback
-    if len(results) < 3:
+    if len(results) < 2:
         try:
             r = requests.get(f"https://www.bing.com/search?q={quote_plus(query)}&count={num}",
-                              headers={"User-Agent": ua}, timeout=10)
+                              headers={"User-Agent": ua}, timeout=12)
             soup = BeautifulSoup(r.text, "html.parser")
             for li in soup.select("li.b_algo")[:num]:
-                a = li.find("h2", recursive=False)
-                a = a.find("a") if a else li.find("a")
-                p = li.find("p")
+                h2 = li.find("h2")
+                a  = h2.find("a") if h2 else None
+                p  = li.find("p")
                 if a and a.get("href","").startswith("http"):
-                    results.append({"title": a.get_text(strip=True),
-                                     "url": a.get("href",""),
-                                     "snippet": p.get_text(strip=True) if p else ""})
+                    results.append({
+                        "title":   a.get_text(strip=True),
+                        "url":     a.get("href",""),
+                        "snippet": p.get_text(strip=True) if p else "",
+                    })
         except: pass
     return results[:num]
 
 
+# ── Catégories de requêtes : chaque query est DÉJÀ un signal négatif ciblé ──
+# Quand DuckDuckGo retourne un résultat pour "Jean Dupont fraude",
+# ce résultat EST une alerte, qu il contienne ou non le mot "fraude" dans le snippet.
+QUERY_CATEGORIES = {
+    # (label_categorie, gravite_defaut, nature)
+    "fraude arnaque escroquerie":          ("fraud",     "eleve",  "Fraude / Arnaque"),
+    "scandale corruption pot-de-vin":      ("fraud",     "eleve",  "Corruption"),
+    "blanchiment financement terrorisme":  ("sanctions", "eleve",  "Blanchiment / Terrorisme"),
+    "condamné tribunal jugement":          ("judicial",  "eleve",  "Condamnation judiciaire"),
+    "mis en examen perquisition":          ("judicial",  "moyen",  "Procédure pénale"),
+    "liquidation judiciaire faillite":     ("judicial",  "moyen",  "Faillite / Liquidation"),
+    "sanction AMF ACPR interdiction":      ("sanctions", "eleve",  "Sanction régulateur"),
+    "liste noire blacklist OFAC":          ("sanctions", "eleve",  "Liste de sanctions"),
+    "plainte victime signalement":         ("reputation","moyen",  "Plainte / Signalement"),
+    "arnaqueur escroc déconseillé":        ("reputation","moyen",  "Réputation négative"),
+    "fraud scam money laundering":         ("fraud",     "eleve",  "Fraude (EN)"),
+    "corruption bribery convicted":        ("fraud",     "eleve",  "Corruption (EN)"),
+    "sanctions blacklist OFAC banned":     ("sanctions", "eleve",  "Sanctions (EN)"),
+    "criminal charges lawsuit arrested":   ("judicial",  "eleve",  "Procédure judiciaire (EN)"),
+    "scandal controversy warning alert":   ("reputation","moyen",  "Signalement (EN)"),
+    "احتيال غسيل أموال فساد":              ("fraud",     "eleve",  "Fraude (AR)"),
+    "عقوبات قائمة سوداء":                  ("sanctions", "eleve",  "Sanctions (AR)"),
+    "мошенничество коррупция арест":       ("fraud",     "eleve",  "Fraude (RU)"),
+    "санкции чёрный список":               ("sanctions", "eleve",  "Sanctions (RU)"),
+    "fraude estafa corrupción":            ("fraud",     "eleve",  "Fraude (ES)"),
+    "欺诈 洗钱 腐败":                       ("fraud",     "eleve",  "Fraude (ZH)"),
+    "trustpilot":                          ("reputation","faible", "Avis Trustpilot"),
+    "signal-arnaques":                     ("reputation","eleve",  "Signal arnaque"),
+    "opensanctions.org":                   ("sanctions", "eleve",  "OpenSanctions"),
+    "amf-france.org":                      ("sanctions", "eleve",  "AMF France"),
+    "acpr.banque-france.fr":               ("sanctions", "eleve",  "ACPR"),
+    "bodacc.fr":                           ("judicial",  "moyen",  "BODACC"),
+    "infogreffe.fr":                       ("judicial",  "faible", "Infogreffe"),
+    "sec.gov":                             ("sanctions", "eleve",  "SEC USA"),
+    "ofac.treas.gov":                      ("sanctions", "eleve",  "OFAC USA"),
+    "twitter.com":                         ("reputation","faible", "Réseau social Twitter"),
+    "linkedin.com":                        ("reputation","faible", "LinkedIn"),
+    "reddit.com":                          ("reputation","faible", "Reddit"),
+    "facebook.com":                        ("reputation","faible", "Facebook"),
+}
+
+
 def build_search_queries(entity: str) -> list:
     """
-    Génère 80+ requêtes exhaustives couvrant :
-    - 10+ langues (FR/EN/ES/PT/DE/IT/AR/ZH/RU/HT)
-    - Presse mondiale, réseaux sociaux, registres légaux, sanctions
-    - AUCUN FILTRE — tout remonter pour revue humaine
+    Construit les requêtes. Chaque requête retourne des résultats
+    qui SONT des alertes potentielles (la requête était déjà négative).
+    Retourne une liste de (query_string, categorie_key).
     """
     e = entity
-    q = []
+    queries = []  # list of (query, cat_key)
 
-    # ── 1. RÉPUTATION / ADVERSE MEDIA ────────────────────────────
-    # FR
-    q += [
-        f'"{e}" fraude arnaque escroquerie',
-        f'"{e}" scandale affaire corruption',
-        f'"{e}" condamné tribunal jugement',
-        f'"{e}" mis en examen perquisition',
-        f'"{e}" liquidation judiciaire faillite',
-        f'"{e}" blanchiment financement terrorisme',
-        f'"{e}" détournement malversation abus',
-        f'"{e}" sanction AMF ACPR interdiction',
-        f'"{e}" plainte victime signalement',
-        f'"{e}" interdit bancaire liste noire',
-        f'"{e}" mise en cause procès pénal',
-        f'"{e}" licenciement révocation démission forcée',
-        f'"{e}" controversé polémique affaire',
-        f'"{e}" arnaqueur escroc malhonnête',
-        f'"{e}" négatif problème risque alerte',
+    # ── FR ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" fraude arnaque escroquerie',          "fraude arnaque escroquerie"),
+        (f'"{e}" scandale corruption pot-de-vin',      "scandale corruption pot-de-vin"),
+        (f'"{e}" blanchiment financement terrorisme',  "blanchiment financement terrorisme"),
+        (f'"{e}" condamné tribunal jugement pénal',    "condamné tribunal jugement"),
+        (f'"{e}" mis en examen perquisition',          "mis en examen perquisition"),
+        (f'"{e}" liquidation judiciaire faillite',     "liquidation judiciaire faillite"),
+        (f'"{e}" sanction AMF ACPR interdiction',      "sanction AMF ACPR interdiction"),
+        (f'"{e}" liste noire blacklist OFAC',          "liste noire blacklist OFAC"),
+        (f'"{e}" plainte victime signalement',         "plainte victime signalement"),
+        (f'"{e}" arnaqueur escroc déconseillé',        "arnaqueur escroc déconseillé"),
+        (f'"{e}" mis en cause procès pénal',           "condamné tribunal jugement"),
+        (f'"{e}" interdit bancaire liste noire',       "liste noire blacklist OFAC"),
+        (f'"{e}" détournement malversation abus',      "scandale corruption pot-de-vin"),
+        (f'"{e}" faux usage falsification',            "fraude arnaque escroquerie"),
     ]
-    # EN
-    q += [
-        f'"{e}" fraud scam money laundering',
-        f'"{e}" corruption bribery convicted sentenced',
-        f'"{e}" sanctions blacklist OFAC banned',
-        f'"{e}" criminal charges lawsuit indicted arrested',
-        f'"{e}" scandal controversy warning alert',
-        f'"{e}" Ponzi scheme embezzlement misappropriation',
-        f'"{e}" regulatory action penalty enforcement',
-        f'"{e}" terrorist financing terrorist links',
-        f'"{e}" fired dismissed misconduct',
-        f'"{e}" negative review complaint bad',
-        f'"{e}" exposed investigated whistleblower',
-        f'"{e}" default bankrupt insolvency',
+    # ── EN ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" fraud scam money laundering',         "fraud scam money laundering"),
+        (f'"{e}" corruption bribery convicted',        "corruption bribery convicted"),
+        (f'"{e}" sanctions blacklist OFAC banned',     "sanctions blacklist OFAC banned"),
+        (f'"{e}" criminal charges lawsuit arrested',   "criminal charges lawsuit arrested"),
+        (f'"{e}" scandal controversy warning alert',   "scandal controversy warning alert"),
+        (f'"{e}" Ponzi embezzlement misappropriation', "fraud scam money laundering"),
+        (f'"{e}" regulatory penalty enforcement',      "sanction AMF ACPR interdiction"),
+        (f'"{e}" terrorist financing links',           "blanchiment financement terrorisme"),
+        (f'"{e}" indicted convicted sentenced prison', "condamné tribunal jugement"),
+        (f'"{e}" bankruptcy insolvency default',       "liquidation judiciaire faillite"),
+        (f'"{e}" fired dismissed misconduct',          "scandal controversy warning alert"),
+        (f'"{e}" tax evasion insider trading',         "fraud scam money laundering"),
     ]
-    # ES
-    q += [
-        f'"{e}" fraude estafa corrupción condenado detenido',
-        f'"{e}" blanqueo dinero sanción investigado',
-        f'"{e}" escándalo denuncia víctima alerta',
+    # ── ES ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" fraude estafa corrupción condenado',  "fraude estafa corrupción"),
+        (f'"{e}" blanqueo dinero sanción investigado', "fraude estafa corrupción"),
+        (f'"{e}" escándalo denuncia víctima',          "fraude estafa corrupción"),
     ]
-    # PT
-    q += [
-        f'"{e}" fraude golpe corrupção preso condenado',
-        f'"{e}" lavagem dinheiro sanção investigado',
-        f'"{e}" escândalo denúncia vítima',
+    # ── PT ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" fraude golpe corrupção condenado',    "fraude estafa corrupción"),
+        (f'"{e}" lavagem dinheiro sanção',             "sanctions blacklist OFAC banned"),
     ]
-    # DE
-    q += [
-        f'"{e}" Betrug Korruption verurteilt verhaftet',
-        f'"{e}" Geldwäsche Sanktion Strafe Ermittlung',
-        f'"{e}" Skandal Beschwerde Warnung',
+    # ── DE ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" Betrug Korruption verurteilt',        "fraud scam money laundering"),
+        (f'"{e}" Geldwäsche Sanktion Ermittlung',      "sanctions blacklist OFAC banned"),
     ]
-    # IT
-    q += [
-        f'"{e}" truffa corruzione condannato arrestato',
-        f'"{e}" riciclaggio sanzione indagato',
-        f'"{e}" scandalo denuncia vittima',
+    # ── IT ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" truffa corruzione condannato',        "fraud scam money laundering"),
+        (f'"{e}" riciclaggio sanzione indagato',       "sanctions blacklist OFAC banned"),
     ]
-    # AR
-    q += [
-        f'"{e}" احتيال غسيل أموال فساد',
-        f'"{e}" عقوبات قائمة سوداء اعتقال',
-        f'"{e}" فضيحة شكوى ضحية تحقيق',
+    # ── AR ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" احتيال غسيل أموال فساد',             "احتيال غسيل أموال فساد"),
+        (f'"{e}" عقوبات قائمة سوداء اعتقال',          "عقوبات قائمة سوداء"),
     ]
-    # RU
-    q += [
-        f'"{e}" мошенничество коррупция арест осуждён',
-        f'"{e}" санкции отмывание денег расследование',
-        f'"{e}" скандал жалоба предупреждение',
+    # ── RU ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" мошенничество коррупция арест',       "мошенничество коррупция арест"),
+        (f'"{e}" санкции чёрный список',               "санкции чёрный список"),
     ]
-    # ZH
-    q += [
-        f'"{e}" 欺诈 洗钱 腐败 逮捕',
-        f'"{e}" 制裁 黑名单 调查',
+    # ── ZH ────────────────────────────────────────────────────────
+    queries += [
+        (f'"{e}" 欺诈 洗钱 腐败 逮捕',                 "欺诈 洗钱 腐败"),
+        (f'"{e}" 制裁 黑名单',                         "sanctions blacklist OFAC banned"),
     ]
-    # HT (Haitian Creole)
-    q += [
-        f'"{e}" fwod eskrokri koripsyon',
-        f'"{e}" sanksyon nwa lis',
+    # ── RÉSEAUX SOCIAUX ───────────────────────────────────────────
+    queries += [
+        (f'site:twitter.com "{e}"',                    "twitter.com"),
+        (f'site:twitter.com "{e}" arnaque scam fraud', "twitter.com"),
+        (f'site:linkedin.com "{e}"',                   "linkedin.com"),
+        (f'site:facebook.com "{e}" arnaque fraude',    "facebook.com"),
+        (f'site:reddit.com "{e}" scam fraud arnaque',  "reddit.com"),
+        (f'site:instagram.com "{e}"',                  "reputation"),
+        (f'site:youtube.com "{e}" arnaque fraud',      "reputation"),
     ]
-
-    # ── 2. SANCTIONS INTERNATIONALES ─────────────────────────────
-    q += [
-        f'site:opensanctions.org "{e}"',
-        f'site:ofac.treas.gov "{e}"',
-        f'site:sanctionsmap.eu "{e}"',
-        f'"{e}" EU UN OFAC SDN blacklist sanctioned',
-        f'site:acpr.banque-france.fr "{e}"',
-        f'site:amf-france.org "{e}"',
-        f'site:tracfin.gouv.fr "{e}"',
-        f'"{e}" Interpol red notice wanted fugitive',
-        f'"{e}" world-check dow-jones watchlist',
-        f'"{e}" PEP politically exposed person',
-        f'"{e}" transparency international corruption',
+    # ── AVIS / ARNAQUES ───────────────────────────────────────────
+    queries += [
+        (f'site:trustpilot.com "{e}"',                 "trustpilot"),
+        (f'site:avis-verifies.com "{e}"',              "trustpilot"),
+        (f'site:glassdoor.com "{e}"',                  "trustpilot"),
+        (f'site:signal-arnaques.com "{e}"',            "signal-arnaques"),
+        (f'site:cybermalveillance.gouv.fr "{e}"',      "signal-arnaques"),
+        (f'"{e}" victime arnaque forum témoignage',    "plainte victime signalement"),
+        (f'"{e}" scam reported victim forum',          "plainte victime signalement"),
     ]
-
-    # ── 3. RÉSEAUX SOCIAUX ────────────────────────────────────────
-    q += [
-        f'site:twitter.com "{e}"',
-        f'site:twitter.com "{e}" fraud scam arnaque warning',
-        f'site:linkedin.com "{e}"',
-        f'site:facebook.com "{e}"',
-        f'site:facebook.com "{e}" arnaque fraude plainte',
-        f'site:instagram.com "{e}"',
-        f'site:reddit.com "{e}"',
-        f'site:reddit.com "{e}" scam fraud arnaque warning',
-        f'site:youtube.com "{e}"',
-        f'site:tiktok.com "{e}"',
-        f't.me "{e}" arnaque fraude',
-        f'site:telegram.org "{e}"',
+    # ── REGISTRES LÉGAUX ──────────────────────────────────────────
+    queries += [
+        (f'site:bodacc.fr "{e}"',                      "bodacc.fr"),
+        (f'site:infogreffe.fr "{e}"',                  "infogreffe.fr"),
+        (f'site:pappers.fr "{e}"',                     "infogreffe.fr"),
+        (f'site:societe.com "{e}"',                    "infogreffe.fr"),
+        (f'site:legifrance.gouv.fr "{e}"',             "condamné tribunal jugement"),
+        (f'site:justice.fr "{e}"',                     "condamné tribunal jugement"),
+        (f'site:courdecassation.fr "{e}"',             "condamné tribunal jugement"),
+        (f'site:companieshouse.gov.uk "{e}"',          "infogreffe.fr"),
+        (f'site:opencorporates.com "{e}"',             "infogreffe.fr"),
+        (f'site:sec.gov "{e}"',                        "sec.gov"),
+        (f'site:pacer.gov "{e}"',                      "condamné tribunal jugement"),
     ]
-
-    # ── 4. AVIS & NOTATIONS ───────────────────────────────────────
-    q += [
-        f'site:trustpilot.com "{e}"',
-        f'site:avis-verifies.com "{e}"',
-        f'site:glassdoor.com "{e}"',
-        f'site:google.com "{e}" avis note étoile',
-        f'"{e}" avis client plainte mauvaise expérience',
-        f'"{e}" déconseillé arnaqueur témoignage victime',
+    # ── SANCTIONS ─────────────────────────────────────────────────
+    queries += [
+        (f'site:opensanctions.org "{e}"',              "opensanctions.org"),
+        (f'site:ofac.treas.gov "{e}"',                 "ofac.treas.gov"),
+        (f'site:sanctionsmap.eu "{e}"',                "sanctions blacklist OFAC banned"),
+        (f'site:amf-france.org "{e}"',                 "amf-france.org"),
+        (f'site:acpr.banque-france.fr "{e}"',          "acpr.banque-france.fr"),
+        (f'"{e}" EU UN OFAC SDN sanctioned',           "sanctions blacklist OFAC banned"),
+        (f'"{e}" Interpol red notice wanted',          "sanctions blacklist OFAC banned"),
+        (f'"{e}" PEP politically exposed',             "sanctions blacklist OFAC banned"),
     ]
-
-    # ── 5. SIGNALEMENTS & ARNAQUES ────────────────────────────────
-    q += [
-        f'site:signal-arnaques.com "{e}"',
-        f'site:cybermalveillance.gouv.fr "{e}"',
-        f'site:escroqueries.fr "{e}"',
-        f'"{e}" arnaque signalé forum victime témoignage',
-        f'"{e}" scam reported forum victim',
+    # ── PRESSE MONDIALE ───────────────────────────────────────────
+    queries += [
+        (f'site:lemonde.fr "{e}"',                     "scandal controversy warning alert"),
+        (f'site:lefigaro.fr "{e}"',                    "scandal controversy warning alert"),
+        (f'site:bfmtv.com "{e}"',                      "scandal controversy warning alert"),
+        (f'site:lesechos.fr "{e}"',                    "scandal controversy warning alert"),
+        (f'site:reuters.com "{e}"',                    "scandal controversy warning alert"),
+        (f'site:bloomberg.com "{e}"',                  "scandal controversy warning alert"),
+        (f'site:bbc.com "{e}"',                        "scandal controversy warning alert"),
+        (f'site:aljazeera.com "{e}"',                  "scandal controversy warning alert"),
+        (f'site:theguardian.com "{e}"',                "scandal controversy warning alert"),
     ]
 
-    # ── 6. REGISTRES LÉGAUX & JUDICIAIRES ────────────────────────
-    q += [
-        f'site:infogreffe.fr "{e}"',
-        f'site:bodacc.fr "{e}"',
-        f'site:pappers.fr "{e}"',
-        f'site:societe.com "{e}"',
-        f'site:verif.com "{e}"',
-        f'site:legifrance.gouv.fr "{e}"',
-        f'site:justice.fr "{e}"',
-        f'site:courdecassation.fr "{e}"',
-        f'site:companieshouse.gov.uk "{e}"',
-        f'site:opencorporates.com "{e}"',
-        f'site:sec.gov "{e}"',
-        f'site:pacer.gov "{e}"',
-        f'"{e}" court records judgment filed convicted',
-        f'"{e}" tribunal commercial pénal correctionnel',
-    ]
-
-    # ── 7. PRESSE MONDIALE ────────────────────────────────────────
-    q += [
-        f'site:lemonde.fr "{e}"',
-        f'site:lefigaro.fr "{e}"',
-        f'site:bfmtv.com "{e}"',
-        f'site:lesechos.fr "{e}"',
-        f'site:latribune.fr "{e}"',
-        f'site:reuters.com "{e}"',
-        f'site:bloomberg.com "{e}"',
-        f'site:ft.com "{e}"',
-        f'site:bbc.com "{e}"',
-        f'site:theguardian.com "{e}"',
-        f'site:nytimes.com "{e}"',
-        f'site:spiegel.de "{e}"',
-        f'site:elpais.com "{e}"',
-        f'site:aljazeera.com "{e}"',
-        f'site:africanews.com "{e}"',
-    ]
-
-    return q
+    return queries
 
 
 def scrape_page(url: str, max_chars=4000) -> str:
     try:
         from bs4 import BeautifulSoup
-        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         r = requests.get(url, headers={"User-Agent": ua}, timeout=10, allow_redirects=True)
         soup = BeautifulSoup(r.text, "html.parser")
         for tag in soup(["script","style","nav","footer","header","aside","iframe"]):
@@ -1040,108 +1041,10 @@ def scrape_page(url: str, max_chars=4000) -> str:
         return ""
 
 
-# ══════════════════════════════════════════════════════════════════
-# KEYWORD ENGINE — multilingue 10 langues, ZÉRO FILTRE PAR DÉFAUT
-# ══════════════════════════════════════════════════════════════════
-
-# Poids 1-5. Catégories : sanctions, fraud, judicial, reputation, pep, positive
-RISK_KEYWORDS = {
-    "sanctions": {
-        "sanction":4,"sanctionné":5,"sanctions":4,"ofac":5,"gel des avoirs":5,
-        "liste noire":5,"blacklist":5,"embargo":4,"liste ue":4,"liste onu":4,
-        "seco":4,"amf sanction":5,"acpr sanction":5,"tracfin":4,
-        "interdiction bancaire":5,"interdit bancaire":4,"interdiction d exercer":5,
-        "sanctioned":5,"blacklisted":5,"ofac list":5,"sdn list":5,
-        "eu sanctions":4,"un sanctions":4,"asset freeze":5,"travel ban":4,
-        "debarred":4,"banned":4,"restricted party":4,
-        "sancionado":4,"lista negra":4,"vetado":4,
-        "sanktioniert":4,"schwarze liste":4,"sanzionato":4,
-        "عقوبات":5,"قائمة سوداء":5,"تجميد":4,"حظر":4,
-        "санкции":5,"чёрный список":5,"заморозка":4,
-        "制裁":5,"黑名单":5,
-        "sanksyon":4,"lis nwa":4,
-    },
-    "fraud": {
-        "fraude":4,"frauduleux":5,"escroquerie":5,"arnaque":4,
-        "abus de confiance":5,"détournement":5,"malversation":5,
-        "falsification":4,"faux et usage de faux":5,"corruption":5,
-        "pot-de-vin":5,"blanchiment":5,"financement du terrorisme":5,
-        "financement terrorisme":5,"abus de biens sociaux":4,
-        "tromperie":3,"pratiques trompeuses":3,"ponzi":5,
-        "escroquerie financière":5,"fraude fiscale":5,
-        "fraud":4,"fraudulent":5,"scam":4,"embezzlement":5,
-        "money laundering":5,"bribery":5,"forgery":4,
-        "misappropriation":5,"terrorist financing":5,
-        "racketeering":5,"extortion":4,"counterfeiting":4,
-        "tax fraud":5,"insider trading":5,"market manipulation":5,
-        "fraude":4,"estafa":5,"corrupción":5,"blanqueo":5,
-        "malversación":5,"soborno":4,"evasión fiscal":5,
-        "fraude":4,"golpe":4,"corrupção":5,"lavagem":5,"suborno":4,
-        "betrug":5,"korruption":5,"geldwäsche":5,"bestechung":4,
-        "steuerhinterziehung":5,"veruntreuung":5,
-        "truffa":5,"corruzione":5,"riciclaggio":5,"frode":5,
-        "احتيال":5,"غسيل الأموال":5,"فساد":5,"رشوة":4,"تهرب ضريبي":4,
-        "مошенничество":5,"коррупция":5,"отмывание":5,"взяточничество":4,
-        "欺诈":5,"洗钱":5,"腐败":5,"贿赂":4,
-        "fwod":4,"eskrokri":4,"koripsyon":4,
-    },
-    "judicial": {
-        "condamné":5,"condamnation":5,"mis en examen":4,"garde à vue":3,
-        "perquisition":3,"liquidation judiciaire":4,"redressement judiciaire":4,
-        "faillite":4,"procédure collective":4,"tribunal correctionnel":4,
-        "jugement":3,"plainte":3,"dépôt de bilan":4,"peine de prison":5,
-        "incarcéré":5,"inculpé":4,"procès":3,"arrêté":3,"interpellé":3,
-        "mandat d arrêt":5,"détention provisoire":4,"renvoi en jugement":4,
-        "convicted":5,"conviction":5,"indicted":4,"arrested":4,
-        "imprisoned":5,"bankruptcy":4,"liquidation":4,"sued":3,
-        "lawsuit":3,"criminal charges":5,"plea guilty":5,"sentenced":5,
-        "warrant":4,"detained":4,"extradited":5,"default judgment":4,
-        "condenado":5,"arrestado":4,"investigado":3,"quiebra":4,
-        "imputado":4,"detenido":4,"preso":5,"indiciado":4,
-        "verurteilt":5,"verhaftet":4,"angeklagt":4,"insolvenz":4,
-        "haftbefehl":5,"ermittlung":3,
-        "condannato":5,"arrestato":4,"indagato":3,"fallimento":4,
-        "مدان":5,"معتقل":4,"محقق":3,"إفلاس":4,"اعتقال":4,
-        "осуждён":5,"арестован":4,"банкротство":4,"задержан":3,
-        "定罪":5,"逮捕":4,"破产":4,"调查":3,
-    },
-    "reputation": {
-        "arnaqueur":4,"escroc":4,"mauvais payeur":3,"litige client":2,
-        "plainte client":3,"très mauvais":2,"déconseillé":3,
-        "méfiez-vous":3,"alerte":2,"avertissement":2,"mise en garde":3,
-        "signalement":2,"victime":2,"scandale":4,"polémique":3,
-        "controversé":3,"dénonciation":3,"incompétent":2,
-        "scammer":4,"bad reviews":2,"complaint":2,"warning":2,
-        "alert":2,"avoid":2,"rip off":3,"victim":2,"dishonest":3,
-        "unreliable":2,"unprofessional":2,"scandal":4,"controversy":3,
-        "estafador":4,"queja":2,"advertencia":2,"víctima":2,
-        "شكوى":3,"ضحية":2,"تحذير":2,"احتيالي":4,
-        "жалоба":2,"предупреждение":2,"мошенник":4,
-        "骗子":4,"投诉":2,"警告":2,
-    },
-    "pep": {
-        "personnalité politique":3,"pep":2,"personne exposée":3,
-        "ministre":2,"député":2,"sénateur":2,"préfet":2,"ambassadeur":3,
-        "haut fonctionnaire":3,"magistrat":3,"élu":2,"dirigeant état":3,
-        "politically exposed":4,"politician":2,"minister":2,
-        "senator":2,"ambassador":3,"public official":2,"government":1,
-        "político":2,"ministro":2,"funcionario":2,
-        "سياسي":2,"وزير":2,"مسؤول":2,
-        "политик":2,"министр":2,"чиновник":2,
-        "政客":2,"部长":2,
-    },
-    "positive": {
-        "agréé":2,"accrédité":2,"certifié":2,"récompensé":2,
-        "fiable":2,"reconnu":1,"régulé":2,"conforme":2,
-        "accredited":2,"certified":2,"trusted":2,"regulated":2,
-        "licensed":2,"compliant":2,"reputable":2,
-    },
-}
-
 SOURCE_CREDIBILITY = {
     "lemonde.fr":1.5,"lefigaro.fr":1.5,"liberation.fr":1.3,"bfmtv.com":1.3,
     "franceinfo.fr":1.4,"latribune.fr":1.4,"lesechos.fr":1.5,"capital.fr":1.3,
-    "leparisien.fr":1.3,"challenges.fr":1.3,"20minutes.fr":1.1,
+    "leparisien.fr":1.3,"challenges.fr":1.3,
     "reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,"wsj.com":1.5,
     "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,
     "spiegel.de":1.4,"elpais.com":1.4,"aljazeera.com":1.3,
@@ -1153,251 +1056,249 @@ SOURCE_CREDIBILITY = {
     "opencorporates.com":1.5,"pappers.fr":1.6,"societe.com":1.4,
     "trustpilot.com":1.2,"avis-verifies.com":1.1,"glassdoor.com":1.1,
     "signal-arnaques.com":1.5,"cybermalveillance.gouv.fr":1.8,
-    "twitter.com":1.0,"linkedin.com":1.0,"reddit.com":1.0,
-    "facebook.com":0.9,"instagram.com":0.8,"youtube.com":0.9,
+    "twitter.com":0.9,"linkedin.com":1.0,"reddit.com":0.9,
+    "facebook.com":0.8,"instagram.com":0.8,"youtube.com":0.8,
 }
 
-def _text_lower(s): return s.lower() if s else ""
+# Gravité par catégorie query
+QUERY_CAT_INFO = {
+    "fraude arnaque escroquerie":         ("fraud",     "eleve",  "Fraude / Arnaque"),
+    "scandale corruption pot-de-vin":     ("fraud",     "eleve",  "Corruption"),
+    "blanchiment financement terrorisme": ("sanctions", "eleve",  "Blanchiment / Terrorisme"),
+    "condamné tribunal jugement":         ("judicial",  "eleve",  "Condamnation judiciaire"),
+    "mis en examen perquisition":         ("judicial",  "moyen",  "Procédure pénale"),
+    "liquidation judiciaire faillite":    ("judicial",  "moyen",  "Faillite / Liquidation"),
+    "sanction AMF ACPR interdiction":     ("sanctions", "eleve",  "Sanction régulateur FR"),
+    "liste noire blacklist OFAC":         ("sanctions", "eleve",  "Liste de sanctions"),
+    "plainte victime signalement":        ("reputation","moyen",  "Plainte / Signalement"),
+    "arnaqueur escroc déconseillé":       ("reputation","moyen",  "Réputation négative"),
+    "fraud scam money laundering":        ("fraud",     "eleve",  "Fraude (EN)"),
+    "corruption bribery convicted":       ("fraud",     "eleve",  "Corruption (EN)"),
+    "sanctions blacklist OFAC banned":    ("sanctions", "eleve",  "Sanctions (EN)"),
+    "criminal charges lawsuit arrested":  ("judicial",  "eleve",  "Procédure judiciaire (EN)"),
+    "scandal controversy warning alert":  ("reputation","moyen",  "Presse / Médias"),
+    "fraude estafa corrupción":           ("fraud",     "eleve",  "Fraude (ES/PT)"),
+    "احتيال غسيل أموال فساد":            ("fraud",     "eleve",  "Fraude (AR)"),
+    "عقوبات قائمة سوداء":                ("sanctions", "eleve",  "Sanctions (AR)"),
+    "мошенничество коррупция арест":      ("fraud",     "eleve",  "Fraude (RU)"),
+    "санкции чёрный список":              ("sanctions", "eleve",  "Sanctions (RU)"),
+    "欺诈 洗钱 腐败":                      ("fraud",     "eleve",  "Fraude (ZH)"),
+    "trustpilot":                         ("reputation","faible", "Avis Trustpilot"),
+    "signal-arnaques":                    ("reputation","eleve",  "Signal arnaque"),
+    "opensanctions.org":                  ("sanctions", "eleve",  "OpenSanctions"),
+    "amf-france.org":                     ("sanctions", "eleve",  "AMF France"),
+    "acpr.banque-france.fr":              ("sanctions", "eleve",  "ACPR"),
+    "bodacc.fr":                          ("judicial",  "moyen",  "BODACC"),
+    "infogreffe.fr":                      ("judicial",  "faible", "Infogreffe / Registre"),
+    "sec.gov":                            ("sanctions", "eleve",  "SEC USA"),
+    "ofac.treas.gov":                     ("sanctions", "eleve",  "OFAC USA"),
+    "twitter.com":                        ("reputation","faible", "Twitter / X"),
+    "linkedin.com":                       ("reputation","faible", "LinkedIn"),
+    "reddit.com":                         ("reputation","faible", "Reddit"),
+    "facebook.com":                       ("reputation","faible", "Facebook"),
+    "reputation":                         ("reputation","faible", "Réseau social / Divers"),
+}
+DEFAULT_CAT_INFO = ("reputation", "faible", "Résultat web générique")
 
 
-def analyze_local(entity: str, search_results: list, scraped_texts: list,
+def analyze_local(entity: str, search_results_with_cat: list, scraped_texts: list,
                   os_result: dict, filter_level: int = 0) -> dict:
     """
-    Moteur OSINT multilingue.
+    NOUVEAU MOTEUR v6 — logique inversée :
+    Chaque résultat retourné par une requête NÉGATIVE est une alerte potentielle.
+    La requête était déjà ciblée (ex: '"Jean Dupont" fraude arnaque').
+    Si DuckDuckGo retourne un résultat → c'est un signal, POINT.
+    On ne cherche plus les mots-clés dans les snippets.
 
-    filter_level 0-10 :
-      0   = ZÉRO FILTRE — tout remonter (recommandé, humain décide)
-      1-3 = entité présente dans la source
-      4-6 = entité dans ±400 chars du mot-clé
-      7-9 = entité dans ±180 chars
-      10  = entité dans ±60 chars (extrême)
-
-    RÈGLE : à FL=0 tous les articles avec mots-clés négatifs sont remontés,
-    même sans mention directe de l entité. C est VOULU.
+    search_results_with_cat = liste de dicts avec champ "query_cat" en plus.
     """
-    require_entity_in_source = (filter_level >= 1)
-    if filter_level == 0:
-        proximity_window = None
-    elif filter_level <= 3:
-        proximity_window = None
-    elif filter_level <= 6:
-        proximity_window = 400
-    elif filter_level <= 9:
-        proximity_window = 180
-    else:
-        proximity_window = 60
-
-    # Seuil minimum pour signaler : TRÈS BAS pour ne rien rater
-    min_neg_score = max(0.5, filter_level * 0.3)
-
     entity_low    = entity.lower().strip()
     entity_words  = [w for w in entity_low.split() if len(w) >= 3]
     entity_tokens = list(set([entity_low] + entity_words))
     if len(entity_words) >= 2:
-        entity_tokens.append(entity_words[0])
-        entity_tokens.append(entity_words[-1])
+        entity_tokens += [entity_words[0], entity_words[-1]]
 
     def entity_present(txt: str) -> bool:
         t = txt.lower()
         return any(tok in t for tok in entity_tokens)
 
-    def entity_near_kw(txt_low: str, kw_idx: int) -> bool:
-        if proximity_window is None:
-            return True   # FL=0 : toujours vrai, tout remonter
-        ctx = txt_low[max(0, kw_idx - proximity_window): kw_idx + proximity_window + len(entity_low)]
-        return any(tok in ctx for tok in entity_tokens)
-
-    scores_by_cat    = {k: 0.0 for k in RISK_KEYWORDS}
     negative_news    = []
-    all_articles     = []   # TOUS les articles pour revue humaine
-    all_text_sources = []
+    all_articles     = []
+    scores_by_cat    = {"sanctions":0.0,"fraud":0.0,"judicial":0.0,"reputation":0.0,"pep":0.0,"positive":0.0}
+    triggered_kws    = []  # mots/requêtes déclencheurs pour chaque alerte
 
-    nature_map = {
-        "sanctions":"Sanction / Liste noire",
-        "fraud":    "Fraude / Corruption",
-        "judicial": "Litige judiciaire",
-        "reputation":"Réputation négative",
-        "pep":      "Exposition PEP",
-    }
+    for r in search_results_with_cat:
+        title   = r.get("title","")
+        url     = r.get("url","")
+        snippet = r.get("snippet","")
+        domain  = urlparse(url).netloc.replace("www.","")
+        cred    = SOURCE_CREDIBILITY.get(domain, 1.0)
+        query_cat = r.get("query_cat","")
+        query_str = r.get("query_str","")
 
-    # ── Construire sources ──────────────────────────────────────────
-    for r in search_results:
-        combined = f"{r.get('title','')} {r.get('snippet','')}".strip()
-        if not combined:
-            continue
-        domain = urlparse(r.get("url","")).netloc.replace("www.","")
-        cred   = SOURCE_CREDIBILITY.get(domain, 1.0)
-        ent_found = entity_present(combined)
+        combined = f"{title} {snippet}"
+        ent_found = entity_present(combined) or entity_present(url)
 
-        # Stocker TOUS les articles pour revue humaine
+        # Store for human review — ALL results
         all_articles.append({
-            "title":            r.get("title",""),
-            "url":              r.get("url",""),
-            "snippet":          r.get("snippet",""),
+            "title":            title,
+            "url":              url,
+            "snippet":          snippet,
             "domain":           domain,
             "entity_mentioned": ent_found,
+            "query_cat":        query_cat,
+            "query_str":        query_str,
         })
 
-        # Filtre source si demandé
-        if require_entity_in_source and not ent_found:
+        # At FL=0: every result from a negative query IS an alert
+        # At FL>=1: only if entity is mentioned in title/snippet
+        if filter_level >= 1 and not ent_found:
             continue
 
-        all_text_sources.append({
-            "text":   combined,
-            "title":  r.get("title",""),
-            "url":    r.get("url",""),
-            "domain": domain,
-            "cred":   cred,
+        # Get category info from the query that produced this result
+        cat_info = QUERY_CAT_INFO.get(query_cat, DEFAULT_CAT_INFO)
+        cat, gravite, nature = cat_info
+
+        # Skip pure positive registries (infogreffe, linkedin) unless entity mentioned
+        if cat in ("reputation",) and query_cat in ("infogreffe.fr","linkedin.com") and not ent_found:
+            gravite = "faible"
+
+        # Score contribution
+        weight = {"eleve":5.0, "moyen":3.0, "faible":1.0}.get(gravite, 1.0) * cred
+        scores_by_cat[cat] = scores_by_cat.get(cat, 0.0) + weight
+
+        # Identify which words in title/snippet match negative keywords
+        combined_low = combined.lower()
+        triggered = []
+        NEG_WORDS = [
+            "fraude","fraud","arnaque","scam","escroquerie","corruption","condamné",
+            "convicted","sanctionné","sanctioned","blanchiment","laundering","faillite",
+            "bankruptcy","tribunal","lawsuit","arresté","arrested","blacklist","liste noire",
+            "détournement","embezzlement","plainte","complaint","victime","victim",
+            "jugement","sentenced","peine","prison","inculpé","indicted","perquisition",
+            "санкции","мошенничество","احتيال","عقوبات","欺诈","制裁","estafa","corrupción",
+            "sanction","interdiction","liquidation","redressement","interdit",
+        ]
+        for w in NEG_WORDS:
+            if w in combined_low:
+                triggered.append(w)
+        # Also always note the query category as trigger
+        if not triggered:
+            triggered = [f"[requête: {query_cat[:40]}]"]
+
+        negative_news.append({
+            "titre":        title[:120] if title else url[:80],
+            "source":       domain,
+            "url":          url,
+            "snippet":      snippet[:200],
+            "date":         "",
+            "nature":       nature,
+            "gravite":      gravite,
+            "mots_cles":    triggered[:6],
+            "query_cat":    query_cat,
+            "query_str":    query_str[:80],
+            "score_brut":   round(weight, 1),
+            "cat":          cat,
+            "entity_found": ent_found,
         })
 
-    for t in scraped_texts:
-        if not t:
-            continue
-        if require_entity_in_source and not entity_present(t):
-            continue
-        all_text_sources.append({
-            "text": t, "title":"", "url":"", "domain":"", "cred":1.0,
-        })
+    # OpenSanctions
+    if os_result.get("found"):
+        scores_by_cat["sanctions"] += os_result["count"] * 15
+        for r in os_result.get("results",[]):
+            negative_news.insert(0, {
+                "titre":     f"OpenSanctions : {r.get('caption','')}",
+                "source":    "opensanctions.org",
+                "url":       f"https://www.opensanctions.org/entities/{r.get('id','')}",
+                "snippet":   f"Datasets: {', '.join(r.get('datasets',[]))}",
+                "date":      "",
+                "nature":    "Sanction internationale confirmée",
+                "gravite":   "eleve",
+                "mots_cles": ["opensanctions"] + r.get("datasets",[])[:3],
+                "query_cat": "opensanctions.org",
+                "query_str": "",
+                "score_brut":15.0,
+                "cat":       "sanctions",
+                "entity_found": True,
+            })
 
-    # ── Scoring ─────────────────────────────────────────────────────
-    for src in all_text_sources:
-        txt_low = src["text"].lower()
-        for cat, kws in RISK_KEYWORDS.items():
-            cat_hits = []
-            for kw, weight in kws.items():
-                idx = txt_low.find(kw)
-                while idx != -1:
-                    if entity_near_kw(txt_low, idx):
-                        effective = weight * src["cred"]
-                        cat_hits.append((kw, round(effective, 1)))
-                        scores_by_cat[cat] += effective
-                        break
-                    idx = txt_low.find(kw, idx + 1)
-
-            if cat != "positive" and cat_hits and src.get("title"):
-                neg_score = sum(w for _, w in cat_hits)
-                if neg_score >= min_neg_score:
-                    gravite = "eleve" if neg_score >= 8 else ("moyen" if neg_score >= 4 else "faible")
-                    negative_news.append({
-                        "titre":      src["title"][:120],
-                        "source":     src.get("domain",""),
-                        "url":        src.get("url",""),
-                        "date":       "",
-                        "nature":     nature_map.get(cat, cat),
-                        "gravite":    gravite,
-                        "mots_cles":  [kw for kw, _ in cat_hits[:5]],
-                        "score_brut": round(neg_score, 1),
-                        "cat":        cat,
-                    })
-
-    # Dédoublonner — garder TOUS les articles distincts
-    seen_titles, neg_dedup = set(), []
+    # Deduplicate by URL
+    seen_urls, neg_dedup = set(), []
     for n in sorted(negative_news, key=lambda x: x["score_brut"], reverse=True):
-        key = n["titre"][:45].lower()
-        if key not in seen_titles:
-            seen_titles.add(key)
+        u = n.get("url","") or n.get("titre","")[:60]
+        if u not in seen_urls:
+            seen_urls.add(u)
             neg_dedup.append(n)
 
-    # OpenSanctions pèse lourd
-    if os_result.get("found"):
-        scores_by_cat["sanctions"] += os_result["count"] * 12
-
-    # Score final
+    # Final score
     raw = (
-        scores_by_cat["sanctions"] * 3.0 +
-        scores_by_cat["fraud"]     * 2.5 +
-        scores_by_cat["judicial"]  * 2.0 +
-        scores_by_cat["reputation"]* 1.5 +
-        scores_by_cat["pep"]       * 1.0
+        scores_by_cat.get("sanctions",0) * 3.0 +
+        scores_by_cat.get("fraud",0)     * 2.5 +
+        scores_by_cat.get("judicial",0)  * 2.0 +
+        scores_by_cat.get("reputation",0)* 1.5 +
+        scores_by_cat.get("pep",0)       * 1.0
     )
-    positive_offset = scores_by_cat["positive"] * 2.0
-    score = min(100, max(0, int(raw * 2.0 - positive_offset)))
+    score = min(100, max(0, int(raw * 1.5)))
 
     if score >= 70:    niveau = "CRITIQUE"
-    elif score >= 45:  niveau = "ELEVE"
-    elif score >= 15:  niveau = "MODERE"
+    elif score >= 40:  niveau = "ELEVE"
+    elif score >= 10:  niveau = "MODERE"
     else:              niveau = "FAIBLE"
 
-    # Recommandation — seuil BAS pour tout signaler
-    if score >= 50 or os_result.get("found") or scores_by_cat["sanctions"] > 5:
-        reco = "REFUSER"
-    elif score >= 10 or len(neg_dedup) >= 1:
-        reco = "VIGILANCE_RENFORCEE"
-    else:
-        reco = "ACCEPTER"
-
-    # Flags
-    sanctions_trouve  = os_result.get("found",False) or scores_by_cat["sanctions"] > 3
-    sanctions_details = ""
-    if os_result.get("found"):
-        sanctions_details = f"{os_result['count']} résultat(s) OpenSanctions : " + \
-            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
-    elif scores_by_cat["sanctions"] > 3:
-        kws_f = set(kw for src in all_text_sources
-                    for kw in RISK_KEYWORDS["sanctions"] if kw in src["text"].lower())
-        sanctions_details = "Indicateurs détectés : " + ", ".join(list(kws_f)[:6])
-
-    litiges_trouve  = scores_by_cat["judicial"] > 2
-    litiges_details = ""
-    if litiges_trouve:
-        kws_j = set(kw for src in all_text_sources
-                    for kw in RISK_KEYWORDS["judicial"] if kw in src["text"].lower())
-        litiges_details = "Indicateurs : " + ", ".join(list(kws_j)[:6])
-
-    pep_trouve  = scores_by_cat["pep"] > 2
-    pep_details = "Indicateurs PEP détectés — vérification requise." if pep_trouve else ""
-
-    rep_score = scores_by_cat["reputation"]
-    pos_score = scores_by_cat["positive"]
-    if rep_score > pos_score:
-        rep_notations = f"Réputation dégradée (score négatif:{round(rep_score,1)} / positif:{round(pos_score,1)})"
-    elif pos_score > rep_score * 2:
-        rep_notations = f"Réputation globalement positive (score:{round(pos_score,1)})"
-    else:
-        rep_notations = "Réputation neutre ou insuffisamment documentée."
+    reco = ("REFUSER"              if score >= 50 or os_result.get("found") else
+            "VIGILANCE_RENFORCEE"  if score >= 5  or len(neg_dedup) >= 1 else
+            "ACCEPTER")
 
     nb_neg    = len(neg_dedup)
-    src_count = len(all_text_sources)
-    nb_total  = len(search_results)
-    fl_label  = {0:"Aucun (tout remonter)",1:"Très léger",2:"Léger",3:"Léger+",
-                 4:"Modéré",5:"Modéré+",6:"Modéré++",
-                 7:"Strict",8:"Strict+",9:"Très strict",10:"Extrême"}.get(filter_level,"")
+    nb_entity = sum(1 for n in neg_dedup if n.get("entity_found"))
+    nb_total  = len(all_articles)
+    src_count = len(neg_dedup)
 
-    resume_parts = [
-        f"Screening de {nb_total} résultats ({src_count} analysés, filtre niveau {filter_level} — {fl_label})."
-    ]
-    if nb_neg:
-        resume_parts.append(f"{nb_neg} signal(aux) négatif(s) détecté(s). Revue humaine requise.")
-    else:
-        resume_parts.append("Aucun signal négatif détecté sur les sources retournées par les moteurs de recherche.")
-    if sanctions_trouve:
-        resume_parts.append("⚠️ Indicateurs de sanctions ou restrictions détectés.")
+    sanctions_trouve  = os_result.get("found",False) or scores_by_cat.get("sanctions",0) > 3
+    sanctions_details = ""
+    if os_result.get("found"):
+        sanctions_details = f"{os_result['count']} résultat(s) : " + \
+            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
+    elif scores_by_cat.get("sanctions",0) > 3:
+        sanctions_details = f"Score sanctions : {round(scores_by_cat['sanctions'],1)} — vérifier sources ci-dessous"
+
+    litiges_trouve  = scores_by_cat.get("judicial",0) > 2
+    litiges_details = f"Score judiciaire : {round(scores_by_cat.get('judicial',0),1)}" if litiges_trouve else ""
+    pep_trouve      = scores_by_cat.get("pep",0) > 2
+    pep_details     = "Indicateurs PEP — vérification requise." if pep_trouve else ""
+
+    rep = scores_by_cat.get("reputation",0)
+    pos = scores_by_cat.get("positive",0)
+    rep_notations = (f"Réputation dégradée (score:{round(rep,1)})" if rep > 3
+                     else "Aucun signal réputation majeur.")
+
+    fl_label = {0:"Aucun filtre (tout remonter)",1:"Très léger",2:"Léger",3:"Léger+",
+                4:"Modéré",5:"Modéré+",6:"Modéré++",7:"Strict",8:"Strict+",
+                9:"Très strict",10:"Extrême"}.get(filter_level,"")
+
+    resume = (f"Screening de {nb_total} résultats. "
+              f"{nb_neg} alerte(s) remontée(s) dont {nb_entity} mentionnant directement {entity}. "
+              f"Filtre : {filter_level}/10 ({fl_label}). Revue humaine requise.")
 
     aggravants, attenuants = [], []
     if os_result.get("found"):
         aggravants.append(f"{os_result['count']} entrée(s) OpenSanctions confirmée(s)")
-    if scores_by_cat["fraud"] > 3:
-        aggravants.append(f"Signaux fraude/corruption détectés (score:{round(scores_by_cat['fraud'],1)})")
-    if scores_by_cat["judicial"] > 2:
+    if scores_by_cat.get("fraud",0) > 3:
+        aggravants.append(f"Signaux fraude/corruption (score:{round(scores_by_cat['fraud'],1)})")
+    if scores_by_cat.get("judicial",0) > 2:
         aggravants.append(f"Signaux procédures judiciaires (score:{round(scores_by_cat['judicial'],1)})")
-    if scores_by_cat["sanctions"] > 3:
+    if scores_by_cat.get("sanctions",0) > 3:
         aggravants.append(f"Signaux sanctions/listes (score:{round(scores_by_cat['sanctions'],1)})")
-    if nb_neg >= 3:
-        aggravants.append(f"{nb_neg} articles avec signaux négatifs listés pour revue")
-    if pos_score > 4:
-        attenuants.append(f"Signaux positifs détectés (score:{round(pos_score,1)})")
-    if nb_neg == 0 and not os_result.get("found"):
-        attenuants.append("Aucun signal négatif dans les sources retournées")
-    if scores_by_cat["sanctions"] == 0:
-        attenuants.append("Absent des bases de sanctions consultées")
-
-    confidence = "ELEVEE" if src_count >= 10 else ("MOYENNE" if src_count >= 4 else "FAIBLE")
+    if nb_entity == 0 and nb_neg > 0:
+        attenuants.append(f"{nb_neg} alertes sans mention directe — possibles faux positifs")
+    if not os_result.get("found"):
+        attenuants.append("Absent des listes OpenSanctions consultées")
 
     return {
         "score_risque":        score,
         "niveau_risque":       niveau,
-        "resume_executif":     " ".join(resume_parts),
-        "negative_news":       neg_dedup[:30],   # jusqu à 30 signaux
+        "resume_executif":     resume,
+        "negative_news":       neg_dedup,
         "all_articles":        all_articles,
         "sanctions":           {"trouve": sanctions_trouve,  "details": sanctions_details},
         "litiges_judiciaires": {"trouve": litiges_trouve,    "details": litiges_details},
@@ -1406,15 +1307,15 @@ def analyze_local(entity: str, search_results: list, scraped_texts: list,
         "facteurs_aggravants": aggravants,
         "facteurs_attenuants": attenuants,
         "recommandation":      reco,
-        "sources_consultees":  list(set(s["domain"] for s in all_text_sources if s.get("domain")))[:30],
-        "confiance_analyse":   confidence,
+        "sources_consultees":  list(set(n["source"] for n in neg_dedup if n.get("source")))[:30],
+        "confiance_analyse":   "ELEVEE" if nb_entity >= 3 else ("MOYENNE" if nb_entity >= 1 else "FAIBLE"),
         "scores_categories":   {k: round(v,1) for k,v in scores_by_cat.items()},
         "nb_sources_filtrees": src_count,
         "nb_sources_total":    nb_total,
+        "nb_entity_direct":    nb_entity,
         "filter_level_used":   filter_level,
-        "moteur":              "local_multilang_v5_no_filter",
+        "moteur":              "v6_query_based",
     }
-
 
 def analyze_with_groq(entity, search_results, scraped_texts, groq_key) -> dict:
     """Groq LLM boost — gratuit 14 400 req/jour sur console.groq.com"""
@@ -1944,17 +1845,20 @@ with tab2:
         os_result = check_opensanctions(entity_input.strip())
         prog.progress(5)
 
-        # STEP 2 — Build & run 50+ queries
-        queries = build_search_queries(entity_input.strip())
+        # STEP 2 — Build & run queries, tag each result with its query category
+        query_pairs = build_search_queries(entity_input.strip())
         all_results = []
-        stat.markdown(f"🌐 **[2/5]** Interrogation de 50+ sources ({len(queries)} requêtes)...")
-        for i, q in enumerate(queries):
-            hits = search_web(q, num=5)
+        stat.markdown(f"🌐 **[2/5]** Interrogation de 50+ sources ({len(query_pairs)} requêtes)...")
+        for i, (q_str, q_cat) in enumerate(query_pairs):
+            hits = search_web(q_str, num=5)
+            for h in hits:
+                h["query_cat"] = q_cat
+                h["query_str"] = q_str
             all_results.extend(hits)
-            prog.progress(5 + int((i + 1) / len(queries) * 45))
+            prog.progress(5 + int((i + 1) / len(query_pairs) * 45))
             time.sleep(0.08)
 
-        # Deduplicate by URL
+        # Deduplicate by URL but keep first occurrence (with its query_cat)
         seen_urls, unique = set(), []
         for r in all_results:
             u = r.get("url","")
@@ -2117,15 +2021,19 @@ with tab2:
             with dl:
                 st.markdown("#### 📰 Signaux négatifs (entité confirmée)")
                 if neg_n:
-                    for n in neg_n[:8]:
+                    for n in neg_n[:15]:
                         g   = n.get("gravite","").lower()
                         cls = {"faible":"info-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"warn-box")
                         url = n.get("url","")
                         lnk = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.72rem;'>→ lire</a>" if url else ""
-                        kws = ", ".join(n.get("mots_cles",[])[:3])
+                        kws = ", ".join(n.get("mots_cles",[])[:4])
+                        direct = " <span style='color:#00ff88;font-size:0.7rem;'>✓ entité mentionnée</span>" if n.get("entity_found") else " <span style='color:#ffcc00;font-size:0.7rem;'>⚠ vérifier pertinence</span>"
+                        snip = n.get("snippet","")[:120]
                         st.markdown(f"""<div class='{cls}'>
-                        <b>{n.get('titre','')[:90]}</b>{lnk}<br>
-                        <small>{n.get('source','')} · {n.get('nature','')} · <span style='color:#ffcc00;'>{kws}</span></small>
+                        <b>{n.get('titre','')[:100]}</b>{lnk}{direct}<br>
+                        <small style='color:#5a6a7a;'>{n.get('source','')} · <b style='color:#c8d6e5;'>{n.get('nature','')}</b></small><br>
+                        <small style='color:#ffcc00;'>🔑 {kws}</small>
+                        {f"<br><small style='color:#5a6a7a;'>{snip}</small>" if snip else ""}
                         </div>""", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='info-box'>Signaux faibles — vérification humaine recommandée.</div>", unsafe_allow_html=True)
