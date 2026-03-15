@@ -2025,15 +2025,15 @@ with tab2:
         # Persist in session
         score  = analysis.get("score_risque", 0)
         niveau = analysis.get("niveau_risque","FAIBLE")
+        reco   = analysis.get("recommandation","ACCEPTER")
         neg_n  = analysis.get("negative_news",[])
-        # Seuil BAS — tout remonter pour revue humaine
         has_risk = (
-            score >= 5                                          # quasi tout
-            or os_result.get("found")                          # sanctions confirmées
-            or analysis.get("sanctions",{}).get("trouve")      # signaux sanctions
-            or analysis.get("litiges_judiciaires",{}).get("trouve")  # litiges
-            or analysis.get("pep_exposure",{}).get("trouve")   # PEP
-            or len(neg_n) >= 1                                 # UN seul signal suffit
+            score >= 5
+            or os_result.get("found")
+            or analysis.get("sanctions",{}).get("trouve")
+            or analysis.get("litiges_judiciaires",{}).get("trouve")
+            or analysis.get("pep_exposure",{}).get("trouve")
+            or len(neg_n) >= 1
             or niveau in ("MODERE","ELEVE","CRITIQUE")
             or reco in ("VIGILANCE_RENFORCEE","REFUSER")
         )
