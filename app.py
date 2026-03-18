@@ -632,7 +632,6 @@ def search_web(query: str, num: int = 5) -> list:
     3. Brave Search
     4. Mojeek (no JS, reliable HTML)
     """
-    global _search_debug
     ua_list = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
@@ -1569,7 +1568,6 @@ with tab2:
         prog.progress(5)
 
         # STEP 2 — Run all queries
-        global _search_debug
         _search_debug["total_hits"] = 0
         _search_debug["engines_used"] = []
         _search_debug["errors"] = []
