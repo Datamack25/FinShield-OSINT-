@@ -557,36 +557,178 @@ NEGATIVE_KEYWORDS = [
 
 # ── 4b. Web search ────────────────────────────────────────────────
 
-def search_web(query: str, num: int = 5) -> list:
-    """DuckDuckGo HTML search with Bing fallback."""
+# Global counter so the UI can show how many results were fetched
+_search_debug = {"total_hits": 0, "engines_used": [], "errors": []}
+
+def _parse_ddg(html: str, num: int) -> list:
+    """Parse DuckDuckGo HTML — handles multiple layout variants."""
     from bs4 import BeautifulSoup
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+    soup = BeautifulSoup(html, "html.parser")
     results = []
-    try:
-        r = requests.get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",
-                         headers={"User-Agent":ua}, timeout=12)
-        soup = BeautifulSoup(r.text, "html.parser")
-        for item in soup.select(".result")[:num]:
-            a    = item.find("a", class_="result__a")
-            snip = item.find("a", class_="result__snippet")
-            if a and str(a.get("href","")).startswith("http"):
-                results.append({"title":a.get_text(strip=True),
-                                 "url":a.get("href",""),
-                                 "snippet":snip.get_text(strip=True) if snip else ""})
-    except: pass
+    # Variant A: classic .result__a
+    for item in soup.select(".result"):
+        a    = item.find("a", class_="result__a") or item.find("a", attrs={"data-testid": "result-title-a"})
+        snip = (item.find("a", class_="result__snippet") or
+                item.find("span", class_="result__snippet") or
+                item.find("div",  class_="result__snippet"))
+        if not a: a = item.find("h2") and item.find("h2").find("a")
+        if a:
+            href = a.get("href","")
+            if href.startswith("//"): href = "https:" + href
+            if href.startswith("http"):
+                results.append({
+                    "title":   a.get_text(strip=True),
+                    "url":     href,
+                    "snippet": snip.get_text(strip=True) if snip else "",
+                })
+        if len(results) >= num: break
+    return results
+
+def _parse_bing(html: str, num: int) -> list:
+    """Parse Bing HTML — handles multiple layout variants."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    for li in soup.select("li.b_algo, li.b_ad"):
+        h2 = li.find("h2") or li.find("h3")
+        a  = h2.find("a") if h2 else li.find("a")
+        p  = (li.find("p") or li.find("div", class_="b_caption") or
+              li.find("div", class_="b_snippet"))
+        if a:
+            href = a.get("href","")
+            if href.startswith("http"):
+                results.append({
+                    "title":   a.get_text(strip=True),
+                    "url":     href,
+                    "snippet": p.get_text(strip=True)[:300] if p else "",
+                })
+        if len(results) >= num: break
+    return results
+
+def _parse_brave(html: str, num: int) -> list:
+    """Parse Brave Search HTML."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    for item in soup.select(".snippet, [data-type='web']"):
+        a    = item.find("a")
+        desc = item.find("p") or item.find(".snippet-description")
+        if a:
+            href = a.get("href","")
+            if href.startswith("http"):
+                results.append({
+                    "title":   a.get_text(strip=True),
+                    "url":     href,
+                    "snippet": desc.get_text(strip=True)[:300] if desc else "",
+                })
+        if len(results) >= num: break
+    return results
+
+def search_web(query: str, num: int = 5) -> list:
+    """
+    Multi-engine web search with 4 fallbacks:
+    1. DuckDuckGo HTML (robust multi-selector parsing)
+    2. Bing HTML
+    3. Brave Search
+    4. Mojeek (no JS, reliable HTML)
+    """
+    global _search_debug
+    ua_list = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    ]
+    import random
+    ua = random.choice(ua_list)
+    headers = {
+        "User-Agent": ua,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "DNT": "1",
+    }
+    results = []
+    q = quote_plus(query)
+
+    # ── Engine 1: DuckDuckGo ─────────────────────────────────────
     if len(results) < 2:
         try:
-            r = requests.get(f"https://www.bing.com/search?q={quote_plus(query)}&count={num}",
-                              headers={"User-Agent":ua}, timeout=12)
-            soup = BeautifulSoup(r.text, "html.parser")
-            for li in soup.select("li.b_algo")[:num]:
-                h2=li.find("h2"); a=h2.find("a") if h2 else None; p=li.find("p")
-                if a and str(a.get("href","")).startswith("http"):
-                    results.append({"title":a.get_text(strip=True),
-                                    "url":a.get("href",""),
-                                    "snippet":p.get_text(strip=True) if p else ""})
-        except: pass
-    return results[:num]
+            r = requests.get(
+                f"https://html.duckduckgo.com/html/?q={q}&kl=fr-fr&kp=-1",
+                headers=headers, timeout=15,
+            )
+            if r.status_code == 200 and len(r.text) > 500:
+                parsed = _parse_ddg(r.text, num)
+                results.extend(parsed)
+                if parsed and "DuckDuckGo" not in _search_debug["engines_used"]:
+                    _search_debug["engines_used"].append("DuckDuckGo")
+        except Exception as e:
+            _search_debug["errors"].append(f"DDG:{str(e)[:60]}")
+
+    # ── Engine 2: Bing ────────────────────────────────────────────
+    if len(results) < 2:
+        try:
+            r = requests.get(
+                f"https://www.bing.com/search?q={q}&count={num}&mkt=fr-FR&setlang=fr",
+                headers={**headers, "User-Agent": ua_list[2]}, timeout=15,
+            )
+            if r.status_code == 200 and len(r.text) > 500:
+                parsed = _parse_bing(r.text, num)
+                results.extend(parsed)
+                if parsed and "Bing" not in _search_debug["engines_used"]:
+                    _search_debug["engines_used"].append("Bing")
+        except Exception as e:
+            _search_debug["errors"].append(f"Bing:{str(e)[:60]}")
+
+    # ── Engine 3: Brave Search ────────────────────────────────────
+    if len(results) < 2:
+        try:
+            r = requests.get(
+                f"https://search.brave.com/search?q={q}&source=web&lang=fr",
+                headers={**headers, "User-Agent": ua_list[0]}, timeout=15,
+            )
+            if r.status_code == 200 and len(r.text) > 500:
+                parsed = _parse_brave(r.text, num)
+                results.extend(parsed)
+                if parsed and "Brave" not in _search_debug["engines_used"]:
+                    _search_debug["engines_used"].append("Brave")
+        except Exception as e:
+            _search_debug["errors"].append(f"Brave:{str(e)[:60]}")
+
+    # ── Engine 4: Mojeek ─────────────────────────────────────────
+    if len(results) < 2:
+        try:
+            from bs4 import BeautifulSoup
+            r = requests.get(
+                f"https://www.mojeek.com/search?q={q}&lang=fr",
+                headers=headers, timeout=15,
+            )
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, "html.parser")
+                for item in soup.select("li.result, ul.results-standard li")[:num]:
+                    a    = item.find("a", class_="title") or item.find("h2",class_="title") and item.find("h2").find("a")
+                    desc = item.find("p", class_="s") or item.find("p")
+                    if a and a.get("href","").startswith("http"):
+                        results.append({
+                            "title":   a.get_text(strip=True),
+                            "url":     a.get("href",""),
+                            "snippet": desc.get_text(strip=True)[:300] if desc else "",
+                        })
+                if results and "Mojeek" not in _search_debug["engines_used"]:
+                    _search_debug["engines_used"].append("Mojeek")
+        except Exception as e:
+            _search_debug["errors"].append(f"Mojeek:{str(e)[:60]}")
+
+    # Deduplicate by URL
+    seen, unique = set(), []
+    for res in results:
+        u = res.get("url","")
+        if u and u not in seen:
+            seen.add(u); unique.append(res)
+
+    _search_debug["total_hits"] += len(unique[:num])
+    return unique[:num]
 
 
 def check_opensanctions(name: str) -> dict:
@@ -1427,8 +1569,14 @@ with tab2:
         prog.progress(5)
 
         # STEP 2 — Run all queries
+        global _search_debug
+        _search_debug["total_hits"] = 0
+        _search_debug["engines_used"] = []
+        _search_debug["errors"] = []
+
         stat.markdown(f"🌐 **[2/4]** {len(QUERY_CATALOGUE)} requêtes thématiques…")
         all_results_with_meta = []
+        dbg = st.empty()   # live debug counter
         for i, (q_tpl, q_cat, q_grav, q_label) in enumerate(QUERY_CATALOGUE):
             q_str = q_tpl.format(e=entity)
             hits  = search_web(q_str, num=nb_results_per_query)
@@ -1438,7 +1586,13 @@ with tab2:
                 h["query_label"]   = q_label
             all_results_with_meta.extend(hits)
             prog.progress(5 + int((i+1)/len(QUERY_CATALOGUE)*55))
+            dbg.caption(
+                f"Requête {i+1}/{len(QUERY_CATALOGUE)} · "
+                f"{len(all_results_with_meta)} résultats bruts · "
+                f"moteurs: {', '.join(_search_debug['engines_used']) or 'aucun'}"
+            )
             time.sleep(0.06)
+        dbg.empty()
 
         # Deduplicate by URL (keep first occurrence)
         seen, unique = set(), []
