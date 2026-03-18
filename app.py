@@ -185,38 +185,71 @@ def init_db():
     conn.commit(); conn.close()
 
 def seed_banks():
+    """
+    Charge les banques depuis swift_banks.csv si présent dans le même répertoire
+    que l'app, sinon utilise la liste FR intégrée en fallback.
+    Format CSV : code,name,address,city,postal_code,country,bic,type
+    """
     conn = get_db(); c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM banks")
     if c.fetchone()[0] > 0: conn.close(); return
-    banks = [
-        ('18989','Aareal bank AG','29 B RUE D ASTORG','PARIS 08','75008','FR','','Etablissement de crédit',''),
-        ('30004','BNP Paribas','16 BOULEVARD DES ITALIENS','PARIS','75009','FR','BNPAFRPP','Etablissement de crédit',''),
-        ('30001','BANQUE DE FRANCE','1 RUE LA VRILLIERE','PARIS 01','75001','FR','BDFEFRPP','Banque centrale',''),
-        ('30003','Societe generale','189 RUE D AUBERVILLIERS','PARIS CEDEX 18','75886','FR','SOGEFRPP','Etablissement de crédit',''),
-        ('30002','CREDIT LYONNAIS LCL','18 rue de la Republique','LYON','69002','FR','CRLYFRPP','Etablissement de crédit',''),
-        ('30006','Credit Agricole S.A.','12 PLACE DES ETATS UNIS','MONTROUGE','92120','FR','AGRIFRPP','Etablissement de crédit',''),
-        ('40618','Boursorama','18 QUAI DU POINT DU JOUR','BOULOGNE BILLANCOURT','92100','FR','BOUSFRPP','Etablissement de crédit',''),
-        ('20041','La Banque Postale','115 RUE DE SEVRES','PARIS CEDEX 06','75275','FR','PSSTFRPP','Etablissement de crédit',''),
-        ('16188','BPCE','50 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','BPCEFRPP','Etablissement de crédit',''),
-        ('10107','BRED Banque populaire','18 QUAI DE LA RAPEE','PARIS 12','75012','FR','BREDFRPP','Etablissement de crédit',''),
-        ('30007','Natixis','30 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','NATXFRPP','Etablissement de crédit',''),
-        ('30066','Credit industriel et commercial CIC','6 AVENUE DE PROVENCE','PARIS 09','75009','FR','CMCIFRPP','Etablissement de crédit',''),
-        ('30076','Credit du Nord','28 PLACE RIHOUR','LILLE CEDEX','59023','FR','NORDFRPP','Etablissement de crédit',''),
-        ('41189','Banco Bilbao Vizcaya Argentaria (BBVA)','29 AVENUE DE L OPERA','PARIS 01','75001','FR','BBVAFRPP','Etablissement de crédit',''),
-        ('44729','Banco Santander SA','40 RUE DE COURCELLES','PARIS 08','75008','FR','BSCHFRPP','Etablissement de crédit',''),
-        ('18769','Bank of China limited','23 AVENUE DE LA GRANDE ARMEE','PARIS 16','75116','FR','BKCHFRPP','Etablissement de crédit',''),
-        ('11833','ICBC Europe SA','73 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','ICBKFRPP','Etablissement de crédit',''),
-        ('30438','ING Bank NV','40 AVENUE DES TERROIRS DE FRANCE','PARIS 12','75012','FR','INGBFRPP','Etablissement de crédit',''),
-        ('30628','JPMorgan Chase bank','14 PLACE VENDOME','PARIS 01','75001','FR','CHASFRPP','Etablissement de crédit',''),
-        ('25533','Goldman Sachs Bank Europe SE','5 Avenue Kleber','PARIS','75116','FR','GOLDFRPP','Etablissement de crédit',''),
-        ('30056','HSBC Continental Europe','38 AVENUE KLEBER','PARIS','75116','FR','CCFRFRPP','Etablissement de crédit',''),
-        ('30758','UBS France S.A.','69 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','UBSWFRPP','Etablissement de crédit',''),
-        ('42559','Credit cooperatif','12 BOULEVARD PESARO','NANTERRE CEDEX','92024','FR','CCOPFRPP','Etablissement de crédit',''),
-        ('30788','Banque Neuflize OBC','3 AVENUE HOCHE','PARIS 08','75008','FR','NEIOFR22','Etablissement de crédit',''),
-        ('12548','Axa banque','203-205 RUE CARNOT','FONTENAY-SOUS-BOIS CEDEX','94138','FR','AXABFRPP','Etablissement de crédit',''),
-        ('11188','RCI Banque','15 RUE D UZES','PARIS','75002','FR','RCIEFR22','Etablissement de crédit',''),
-        ('30748','Lazard Freres Banque','121 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','LAZAFRPP','Etablissement de crédit',''),
-    ]
+
+    banks = []
+
+    # ── 1. Essai depuis swift_banks.csv (même dossier que app.py) ──────────
+    import os, csv as csv_module
+    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swift_banks.csv")
+    if os.path.exists(csv_path):
+        try:
+            with open(csv_path, newline='', encoding='utf-8') as f:
+                reader = csv_module.DictReader(f)
+                for row in reader:
+                    banks.append((
+                        row.get('code',''),
+                        row.get('name',''),
+                        row.get('address',''),
+                        row.get('city',''),
+                        row.get('postal_code',''),
+                        row.get('country',''),
+                        row.get('bic',''),
+                        row.get('type','Etablissement de crédit'),
+                        ''  # notes
+                    ))
+        except Exception:
+            banks = []  # fallback si CSV corrompu
+
+    # ── 2. Fallback : banques françaises hardcodées ─────────────────────────
+    if not banks:
+        banks = [
+            ('18989','Aareal bank AG','29 B RUE D ASTORG','PARIS 08','75008','FR','','Etablissement de crédit',''),
+            ('30004','BNP Paribas','16 BOULEVARD DES ITALIENS','PARIS','75009','FR','BNPAFRPP','Etablissement de crédit',''),
+            ('30001','BANQUE DE FRANCE','1 RUE LA VRILLIERE','PARIS 01','75001','FR','BDFEFRPP','Banque centrale',''),
+            ('30003','Societe generale','189 RUE D AUBERVILLIERS','PARIS CEDEX 18','75886','FR','SOGEFRPP','Etablissement de crédit',''),
+            ('30002','CREDIT LYONNAIS LCL','18 rue de la Republique','LYON','69002','FR','CRLYFRPP','Etablissement de crédit',''),
+            ('30006','Credit Agricole S.A.','12 PLACE DES ETATS UNIS','MONTROUGE','92120','FR','AGRIFRPP','Etablissement de crédit',''),
+            ('40618','Boursorama','18 QUAI DU POINT DU JOUR','BOULOGNE BILLANCOURT','92100','FR','BOUSFRPP','Etablissement de crédit',''),
+            ('20041','La Banque Postale','115 RUE DE SEVRES','PARIS CEDEX 06','75275','FR','PSSTFRPP','Etablissement de crédit',''),
+            ('16188','BPCE','50 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','BPCEFRPP','Etablissement de crédit',''),
+            ('10107','BRED Banque populaire','18 QUAI DE LA RAPEE','PARIS 12','75012','FR','BREDFRPP','Etablissement de crédit',''),
+            ('30007','Natixis','30 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','NATXFRPP','Etablissement de crédit',''),
+            ('30066','Credit industriel et commercial CIC','6 AVENUE DE PROVENCE','PARIS 09','75009','FR','CMCIFRPP','Etablissement de crédit',''),
+            ('30076','Credit du Nord','28 PLACE RIHOUR','LILLE CEDEX','59023','FR','NORDFRPP','Etablissement de crédit',''),
+            ('41189','Banco Bilbao Vizcaya Argentaria (BBVA)','29 AVENUE DE L OPERA','PARIS 01','75001','FR','BBVAFRPP','Etablissement de crédit',''),
+            ('44729','Banco Santander SA','40 RUE DE COURCELLES','PARIS 08','75008','FR','BSCHFRPP','Etablissement de crédit',''),
+            ('18769','Bank of China limited','23 AVENUE DE LA GRANDE ARMEE','PARIS 16','75116','FR','BKCHFRPP','Etablissement de crédit',''),
+            ('11833','ICBC Europe SA','73 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','ICBKFRPP','Etablissement de crédit',''),
+            ('30438','ING Bank NV','40 AVENUE DES TERROIRS DE FRANCE','PARIS 12','75012','FR','INGBFRPP','Etablissement de crédit',''),
+            ('30628','JPMorgan Chase bank','14 PLACE VENDOME','PARIS 01','75001','FR','CHASFRPP','Etablissement de crédit',''),
+            ('25533','Goldman Sachs Bank Europe SE','5 Avenue Kleber','PARIS','75116','FR','GOLDFRPP','Etablissement de crédit',''),
+            ('30056','HSBC Continental Europe','38 AVENUE KLEBER','PARIS','75116','FR','CCFRFRPP','Etablissement de crédit',''),
+            ('30758','UBS France S.A.','69 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','UBSWFRPP','Etablissement de crédit',''),
+            ('42559','Credit cooperatif','12 BOULEVARD PESARO','NANTERRE CEDEX','92024','FR','CCOPFRPP','Etablissement de crédit',''),
+            ('30788','Banque Neuflize OBC','3 AVENUE HOCHE','PARIS 08','75008','FR','NEIOFR22','Etablissement de crédit',''),
+            ('12548','Axa banque','203-205 RUE CARNOT','FONTENAY-SOUS-BOIS CEDEX','94138','FR','AXABFRPP','Etablissement de crédit',''),
+            ('11188','RCI Banque','15 RUE D UZES','PARIS','75002','FR','RCIEFR22','Etablissement de crédit',''),
+            ('30748','Lazard Freres Banque','121 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','LAZAFRPP','Etablissement de crédit',''),
+        ]
+
     c.executemany("""INSERT OR IGNORE INTO banks
         (code,name,address,city,postal_code,country,bic,type,notes) VALUES (?,?,?,?,?,?,?,?,?)""", banks)
     conn.commit(); conn.close()
@@ -785,8 +818,10 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
     rccolor= {"ACCEPTER":c["GREEN"],"VIGILANCE_RENFORCEE":c["YEL"],"REFUSER":c["RED"]}.get(reco,c["MUTED"])
 
     # ─── 1. HEADER ───────────────────────────────────────────────
+    today_header = datetime.now().strftime("%d/%m/%Y")
     story.append(tbl(
-        [["🛡️  FinShield OSINT — Rapport de Conformité", f"Généré le\n{now_str}"]],
+        [["🛡️  FinShield OSINT — Rapport de Conformité",
+          f"Date : {today_header}\nGénéré le {now_str}"]],
         [120*mm, 52*mm],
         [("BACKGROUND",(0,0),(-1,-1),c["BG"]),
          ("TEXTCOLOR",(0,0),(0,0),c["ACC"]),("TEXTCOLOR",(1,0),(1,0),c["MUTED"]),
@@ -882,15 +917,19 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
          "DÉTECTÉ" if pep.get("trouve") else "Non détecté",
          pep.get("details","")[:85]],
     ]
-    t = tbl(reg_rows, [45*mm,28*mm,99*mm],
-        [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
-         ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-         ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+    # ── build dynamic style for regulatory table (fix _tStyle) ──
+    reg_style_cmds = [
+        ("BACKGROUND",(0,0),(-1,0),c["SURF"]),
+        ("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]]),
+    ]
     for i in range(1, len(reg_rows)):
         col = c["RED"] if "DÉTECTÉ" in str(reg_rows[i][1]) or (i==2 and os_result.get("count",0)>0) else c["GREEN"]
-        t._tStyle.add("TEXTCOLOR",(1,i),(1,i),col)
-        t._tStyle.add("FONTNAME",(1,i),(1,i),"Helvetica-Bold")
-    story.append(t); story.append(Spacer(1,8))
+        reg_style_cmds.append(("TEXTCOLOR",(1,i),(1,i),col))
+        reg_style_cmds.append(("FONTNAME",(1,i),(1,i),"Helvetica-Bold"))
+    story.append(tbl(reg_rows, [45*mm,28*mm,99*mm], reg_style_cmds))
+    story.append(Spacer(1,8))
 
     # ─── 7. NEGATIVE SIGNALS TABLE ───────────────────────────────
     story.append(Paragraph(f"4. Signaux Négatifs Détectés ({len(neg_n)})", c["sH1"]))
@@ -910,17 +949,21 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
                 ", ".join(n.get("mots_cles",[])[:3])[:30],
                 "✓" if n.get("entity_found") else "—",
             ])
-        t2 = tbl(nh, [72*mm,35*mm,18*mm,32*mm,15*mm],
-            [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
-             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
-             ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+        # ── build dynamic style (fix _tStyle) ──
+        neg_style_cmds = [
+            ("BACKGROUND",(0,0),(-1,0),c["SURF"]),
+            ("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+            ("FONTSIZE",(0,0),(-1,-1),7),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]]),
+        ]
         for i, n in enumerate(neg_n[:20], 1):
             col = gmap.get(n.get("gravite","").lower(), c["MUTED"])
-            t2._tStyle.add("TEXTCOLOR",(2,i),(2,i),col)
-            t2._tStyle.add("FONTNAME",(2,i),(2,i),"Helvetica-Bold")
+            neg_style_cmds.append(("TEXTCOLOR",(2,i),(2,i),col))
+            neg_style_cmds.append(("FONTNAME",(2,i),(2,i),"Helvetica-Bold"))
             if n.get("entity_found"):
-                t2._tStyle.add("TEXTCOLOR",(4,i),(4,i),c["GREEN"])
-        story.append(t2)
+                neg_style_cmds.append(("TEXTCOLOR",(4,i),(4,i),c["GREEN"]))
+        story.append(tbl(nh, [72*mm,35*mm,18*mm,32*mm,15*mm], neg_style_cmds))
     else:
         story.append(Paragraph("Aucun signal négatif détecté.", c["sBody"]))
     story.append(Spacer(1,6))
@@ -942,14 +985,18 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
                 a.get("query_label","")[:28],
                 "✓" if a.get("entity_mentioned") else "—",
             ])
-        t3 = tbl(ah, [80*mm,32*mm,42*mm,18*mm],
-            [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
-             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
-             ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+        # ── build dynamic style (fix _tStyle) ──
+        src_style_cmds = [
+            ("BACKGROUND",(0,0),(-1,0),c["SURF"]),
+            ("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+            ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+            ("FONTSIZE",(0,0),(-1,-1),7),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]]),
+        ]
         for i, a in enumerate(all_art[:50], 1):
             if a.get("entity_mentioned"):
-                t3._tStyle.add("TEXTCOLOR",(3,i),(3,i),c["GREEN"])
-        story.append(t3)
+                src_style_cmds.append(("TEXTCOLOR",(3,i),(3,i),c["GREEN"]))
+        story.append(tbl(ah, [80*mm,32*mm,42*mm,18*mm], src_style_cmds))
     story.append(Spacer(1,8))
 
     # ─── 9. RISK FACTORS ─────────────────────────────────────────
@@ -957,7 +1004,6 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
     fat = analysis.get("facteurs_attenuants",[])
     if fa or fat:
         story.append(Paragraph("6. Facteurs de Risque", c["sH1"]))
-        from reportlab.platypus import KeepTogether
         c1 = [Paragraph("⚠ Aggravants", ParagraphStyle("fa",fontSize=8.5,
               textColor=c["RED"],fontName="Helvetica-Bold"))]
         c1 += [Paragraph(f"• {f}", c["sBody"]) for f in fa] or [Paragraph("Aucun", c["sBody"])]
@@ -990,9 +1036,30 @@ def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
     story.append(HRFlowable(width="100%",thickness=0.5,color=c["BORD"],spaceAfter=4))
     verdict = f"VALIDATION : {human_decision or 'EN ATTENTE'}"
     if analyst_name: verdict += f" par {analyst_name}"
-    story.append(Paragraph(
-        f"FinShield OSINT v3 · {now_str} · {verdict} · "
-        f"CONFIDENTIEL — Usage interne exclusif", c["sSmall"]))
+
+    # Footer row: copyright left | verdict center | date right
+    today_str = datetime.now().strftime("%d/%m/%Y")
+    _sFooter = ParagraphStyle("footer", fontSize=6, textColor=c["MUTED"],
+                               fontName="Helvetica", leading=8)
+    footer_tbl = Table(
+        [[
+            Paragraph(f"© {datetime.now().year} Mackenson CINEUS · Tous droits réservés", _sFooter),
+            Paragraph(f"FinShield OSINT v3 · {verdict} · CONFIDENTIEL", _sFooter),
+            Paragraph(f"Généré le {today_str}", _sFooter),
+        ]],
+        colWidths=[60*mm, 80*mm, 32*mm],
+        style=TableStyle([
+            ("FONTSIZE",(0,0),(-1,-1),6),
+            ("TEXTCOLOR",(0,0),(-1,-1),c["MUTED"]),
+            ("ALIGN",(0,0),(0,0),"LEFT"),
+            ("ALIGN",(1,0),(1,0),"CENTER"),
+            ("ALIGN",(2,0),(2,0),"RIGHT"),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("TOPPADDING",(0,0),(-1,-1),3),
+            ("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ])
+    )
+    story.append(footer_tbl)
 
     doc.build(story)
     return buf.getvalue()
