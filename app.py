@@ -94,7 +94,33 @@ hr{border-color:var(--border)!important;}
 .app-sub{font-size:0.8rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
 .section-title{font-family:'IBM Plex Mono',monospace;font-size:1rem;color:var(--accent);
   text-transform:uppercase;letter-spacing:2px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+/* ── Footer fixe bas gauche ── */
+.app-footer{
+  position:fixed;bottom:10px;left:14px;z-index:9999;
+  font-size:0.62rem;color:#3a4a5a;font-family:'IBM Plex Mono',monospace;
+  pointer-events:none;line-height:1.6;
+}
+/* ── Date fixe haut droite ── */
+.app-date{
+  position:fixed;top:10px;right:14px;z-index:9999;
+  font-size:0.68rem;color:#3a4a5a;font-family:'IBM Plex Mono',monospace;
+  pointer-events:none;background:var(--bg);padding:2px 8px;
+  border:1px solid var(--border);border-radius:4px;
+}
 </style>
+""", unsafe_allow_html=True)
+
+# ── Footer copyright fixe + date du jour en haut à droite ─────────
+import datetime as _dt
+_today = _dt.datetime.now().strftime("%d/%m/%Y")
+_year  = _dt.datetime.now().year
+st.markdown(f"""
+<div class="app-footer">
+  © {_year} Mackenson CINEUS — Tous droits réservés
+</div>
+<div class="app-date">
+  📅 {_today}
+</div>
 """, unsafe_allow_html=True)
 
 
