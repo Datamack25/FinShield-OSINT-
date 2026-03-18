@@ -10,6 +10,7 @@ reportlab>=4.1
 pypdf>=4.0
 pdfplumber>=0.10
 Pillow>=10.0
+openpyxl
 
 # ── LLM optionnel (boost gratuit) ─────────────────────────────────
 # Groq  : clé gratuite sur https://console.groq.com
