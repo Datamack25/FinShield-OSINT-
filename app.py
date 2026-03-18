@@ -1,47 +1,71 @@
+"""
+╔══════════════════════════════════════════════════════════════════╗
+║              FinShield OSINT v3  —  Architecture Guide           ║
+╠══════════════════════════════════════════════════════════════════╣
+║  SECTIONS (search "# §" to jump between them)                    ║
+║                                                                  ║
+║  § 0  IMPORTS & PAGE CONFIG                                      ║
+║  § 1  CONFIGURATION  ← edit thresholds, query lists here        ║
+║  § 2  DATABASE LAYER  (SQLite — banks, IBAN, reports, watchlist) ║
+║  § 3  IBAN VALIDATION                                            ║
+║  § 4  OSINT ENGINE    ← search queries + scoring logic here      ║
+║  § 5  PDF REPORT      ← ReportLab layout here                   ║
+║  § 6  EXCEL HISTORY   ← openpyxl workbook logic here            ║
+║  § 7  STREAMLIT SIDEBAR                                          ║
+║  § 8  TAB 1 — IBAN VERIFICATION                                  ║
+║  § 9  TAB 2 — OSINT ANALYSIS                                     ║
+║  § 10 TAB 3 — BANK SEARCH                                        ║
+║  § 11 TAB 4 — DATABASE MANAGEMENT                                ║
+║  § 12 TAB 5 — HISTORY & WATCHLIST                                ║
+╚══════════════════════════════════════════════════════════════════╝
+"""
+
+# ─────────────────────────────────────────────────────────────────
+# § 0  IMPORTS & PAGE CONFIG
+# ─────────────────────────────────────────────────────────────────
 import streamlit as st
-import requests
-import json
-import re
-import time
-import os
-import sqlite3
-import csv
-import io
+import requests, json, re, time, os, sqlite3, csv, io, textwrap
 from datetime import datetime
 from io import BytesIO
 from urllib.parse import quote_plus, urlparse
-# anthropic not required — using free local engine
-import pandas as pd
 
-# ── Page config ────────────────────────────────────────────────────────────────
+import pandas as pd
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import HexColor
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
+                                 Table, TableStyle, HRFlowable, PageBreak)
+from reportlab.lib.units import mm
+
 st.set_page_config(
-    page_title="FinShield OSINT",
+    page_title="FinShield OSINT v3",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── CSS ────────────────────────────────────────────────────────────────────────
+# ── CSS (unchanged from v2) ───────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
-:root {
-  --bg:#0a0d14; --surface:#111520; --border:#1e2535;
-  --accent:#00d4ff; --accent2:#ff6b35; --green:#00ff88;
-  --red:#ff3366; --yellow:#ffcc00; --text:#c8d6e5; --muted:#5a6a7a;
-}
+:root{--bg:#0a0d14;--surface:#111520;--border:#1e2535;--accent:#00d4ff;
+  --accent2:#ff6b35;--green:#00ff88;--red:#ff3366;--yellow:#ffcc00;
+  --text:#c8d6e5;--muted:#5a6a7a;}
 html,body,[data-testid="stApp"]{background:var(--bg)!important;color:var(--text);font-family:'IBM Plex Sans',sans-serif;}
 [data-testid="stSidebar"]{background:var(--surface)!important;border-right:1px solid var(--border);}
 [data-testid="stSidebar"] *{color:var(--text)!important;}
 h1,h2,h3{font-family:'IBM Plex Mono',monospace!important;}
-h1{color:var(--accent)!important;letter-spacing:-0.5px;}
+h1{color:var(--accent)!important;}
 h2{color:var(--text)!important;border-bottom:1px solid var(--border);padding-bottom:8px;}
 h3{color:var(--accent)!important;font-size:0.95rem!important;}
 input,textarea,[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea{
   background:var(--surface)!important;color:var(--text)!important;
   border:1px solid var(--border)!important;border-radius:4px!important;
   font-family:'IBM Plex Mono',monospace!important;}
-input:focus,textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0 2px rgba(0,212,255,0.1)!important;}
 .stButton>button{background:transparent!important;color:var(--accent)!important;
   border:1px solid var(--accent)!important;border-radius:3px!important;
   font-family:'IBM Plex Mono',monospace!important;font-size:0.85rem!important;
@@ -50,43 +74,81 @@ input:focus,textarea:focus{border-color:var(--accent)!important;box-shadow:0 0 0
 .metric-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:16px 20px;margin:8px 0;}
 .metric-card .label{font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;}
 .metric-card .value{font-family:'IBM Plex Mono',monospace;font-size:1.4rem;color:var(--accent);margin-top:4px;}
-.metric-card .sub{font-size:0.8rem;color:var(--text);margin-top:2px;}
-.badge-low{background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;font-family:'IBM Plex Mono',monospace;}
-.badge-medium{background:rgba(255,204,0,0.1);color:var(--yellow);border:1px solid rgba(255,204,0,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;font-family:'IBM Plex Mono',monospace;}
-.badge-high{background:rgba(255,51,102,0.1);color:var(--red);border:1px solid rgba(255,51,102,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;font-family:'IBM Plex Mono',monospace;}
+.badge-low{background:rgba(0,255,136,0.1);color:var(--green);border:1px solid rgba(0,255,136,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;}
+.badge-medium{background:rgba(255,204,0,0.1);color:var(--yellow);border:1px solid rgba(255,204,0,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;}
+.badge-high{background:rgba(255,51,102,0.1);color:var(--red);border:1px solid rgba(255,51,102,0.3);padding:2px 10px;border-radius:12px;font-size:0.75rem;}
 .info-box{background:rgba(0,212,255,0.05);border-left:3px solid var(--accent);padding:12px 16px;margin:8px 0;border-radius:0 4px 4px 0;font-size:0.88rem;}
 .warn-box{background:rgba(255,204,0,0.05);border-left:3px solid var(--yellow);padding:12px 16px;margin:8px 0;border-radius:0 4px 4px 0;font-size:0.88rem;}
 .danger-box{background:rgba(255,51,102,0.07);border-left:3px solid var(--red);padding:12px 16px;margin:8px 0;border-radius:0 4px 4px 0;font-size:0.88rem;}
 .ok-box{background:rgba(0,255,136,0.05);border-left:3px solid var(--green);padding:12px 16px;margin:8px 0;border-radius:0 4px 4px 0;font-size:0.88rem;}
 .result-row{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin:6px 0;font-size:0.85rem;}
-.result-row:hover{border-color:var(--accent);}
-[data-testid="stTabs"] [role="tablist"]{border-bottom:1px solid var(--border)!important;gap:0!important;}
-[data-testid="stTabs"] button{background:transparent!important;color:var(--muted)!important;border-radius:0!important;
-  border-bottom:2px solid transparent!important;font-family:'IBM Plex Mono',monospace!important;
-  font-size:0.8rem!important;letter-spacing:1px!important;padding:8px 18px!important;}
+[data-testid="stTabs"] button{background:transparent!important;color:var(--muted)!important;
+  border-radius:0!important;border-bottom:2px solid transparent!important;
+  font-family:'IBM Plex Mono',monospace!important;font-size:0.8rem!important;letter-spacing:1px!important;}
 [data-testid="stTabs"] button[aria-selected="true"]{color:var(--accent)!important;border-bottom-color:var(--accent)!important;background:rgba(0,212,255,0.05)!important;}
 [data-testid="stExpander"]{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:4px!important;}
-[data-testid="stExpander"] summary{color:var(--text)!important;}
-[data-testid="stSelectbox"] div,[data-testid="stMultiSelect"] div{background:var(--surface)!important;color:var(--text)!important;border-color:var(--border)!important;}
 hr{border-color:var(--border)!important;}
 .stProgress>div>div{background:var(--accent)!important;}
-::-webkit-scrollbar{width:6px;height:6px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
 .header-strip{display:flex;align-items:center;gap:16px;padding:20px 0 12px;border-bottom:1px solid var(--border);margin-bottom:24px;}
-.shield-icon{font-size:2.5rem;}
-.app-title{font-family:'IBM Plex Mono',monospace;font-size:1.8rem;color:var(--accent);letter-spacing:-1px;}
-.app-sub{font-size:0.8rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
-.section-title{font-family:'IBM Plex Mono',monospace;font-size:1rem;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
-table{width:100%!important;}
-[data-testid="stDataFrame"]{background:var(--surface)!important;}
+.app-title{font-family:'IBM Plex Mono',monospace;font-size:1.8rem;color:var(--accent);}
+.app-sub{font-size:0.8rem;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+.section-title{font-family:'IBM Plex Mono',monospace;font-size:1rem;color:var(--accent);
+  text-transform:uppercase;letter-spacing:2px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
 </style>
 """, unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════
-# DATABASE LAYER — SQLite persistence
-# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# § 1  CONFIGURATION
+# ─────────────────────────────────────────────────────────────────
+# ── Score weights per alert category ─────────────────────────────
+SCORE_WEIGHTS = {
+    "sanctions": 3.0,   # Heaviest — confirmed lists
+    "fraud":     2.5,   # Financial crime
+    "judicial":  2.0,   # Court proceedings
+    "reputation":1.5,   # Press, reviews
+    "pep":       1.0,   # PEP exposure
+}
+
+# ── Source credibility multipliers ───────────────────────────────
+SOURCE_CREDIBILITY = {
+    # Official/regulatory
+    "opensanctions.org":2.0,"legifrance.gouv.fr":2.0,"justice.fr":2.0,
+    "bodacc.fr":1.8,"amf-france.org":2.0,"acpr.banque-france.fr":2.0,
+    "interpol.int":2.0,"europol.europa.eu":2.0,"tracfin.gouv.fr":2.0,
+    "courdecassation.fr":1.9,"sec.gov":2.0,"ofac.treas.gov":2.0,
+    "pacer.gov":1.8,"companieshouse.gov.uk":1.7,"opencorporates.com":1.5,
+    "pappers.fr":1.6,"societe.com":1.4,"infogreffe.fr":1.8,
+    # Press — major
+    "lemonde.fr":1.5,"lefigaro.fr":1.5,"liberation.fr":1.3,
+    "bfmtv.com":1.3,"franceinfo.fr":1.4,"latribune.fr":1.4,
+    "lesechos.fr":1.5,"capital.fr":1.3,"leparisien.fr":1.3,
+    "reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,
+    "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,
+    # Review/scam reporting
+    "trustpilot.com":1.2,"signal-arnaques.com":1.5,
+    "cybermalveillance.gouv.fr":1.8,"avis-verifies.com":1.1,
+    # Social (lower weight)
+    "twitter.com":0.9,"linkedin.com":1.0,"reddit.com":0.9,
+    "facebook.com":0.8,"instagram.com":0.8,
+}
+
+# ── Score → risk level thresholds ────────────────────────────────
+RISK_THRESHOLDS = {"CRITIQUE": 70, "ELEVE": 40, "MODERE": 10, "FAIBLE": 0}
+
+# ── Gravity weights used in query-result scoring ──────────────────
+GRAVITY_WEIGHTS = {"eleve": 5.0, "moyen": 3.0, "faible": 1.0}
+
+# ── Excel history file path ───────────────────────────────────────
+EXCEL_HISTORY_PATH = "finshield_history.xlsx"
+
+# ── SQLite database path ──────────────────────────────────────────
 DB_PATH = "finshield.db"
+
+
+# ─────────────────────────────────────────────────────────────────
+# § 2  DATABASE LAYER
+# ─────────────────────────────────────────────────────────────────
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -94,515 +156,111 @@ def get_db():
     return conn
 
 def init_db():
-    conn = get_db()
-    c = conn.cursor()
-
-    # Banks table
+    conn = get_db(); c = conn.cursor()
     c.execute("""CREATE TABLE IF NOT EXISTS banks (
-        code        TEXT PRIMARY KEY,
-        name        TEXT NOT NULL,
-        address     TEXT DEFAULT '',
-        city        TEXT DEFAULT '',
-        postal_code TEXT DEFAULT '',
-        country     TEXT DEFAULT 'FR',
-        bic         TEXT DEFAULT '',
-        type        TEXT DEFAULT '',
-        regafi_url  TEXT DEFAULT '',
-        notes       TEXT DEFAULT '',
-        created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
-    )""")
-
-    # IBAN country structures table
+        code TEXT PRIMARY KEY, name TEXT NOT NULL,
+        address TEXT DEFAULT '', city TEXT DEFAULT '',
+        postal_code TEXT DEFAULT '', country TEXT DEFAULT 'FR',
+        bic TEXT DEFAULT '', type TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS iban_countries (
-        code        TEXT PRIMARY KEY,
-        name        TEXT NOT NULL,
-        length      INTEGER NOT NULL,
-        structure   TEXT DEFAULT '',
-        example     TEXT DEFAULT '',
-        bban_format TEXT DEFAULT '',
-        notes       TEXT DEFAULT ''
-    )""")
-
-    # OSINT reports history
+        code TEXT PRIMARY KEY, name TEXT NOT NULL, length INTEGER NOT NULL,
+        structure TEXT DEFAULT '', example TEXT DEFAULT '',
+        bban_format TEXT DEFAULT '', notes TEXT DEFAULT '')""")
     c.execute("""CREATE TABLE IF NOT EXISTS osint_reports (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        entity      TEXT NOT NULL,
-        entity_type TEXT DEFAULT '',
-        iban        TEXT DEFAULT '',
-        score       INTEGER DEFAULT 0,
-        niveau      TEXT DEFAULT '',
-        recommandation TEXT DEFAULT '',
-        resume      TEXT DEFAULT '',
-        full_json   TEXT DEFAULT '',
-        created_at  TEXT DEFAULT CURRENT_TIMESTAMP
-    )""")
-
-    # Watchlist
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL, entity_type TEXT DEFAULT '',
+        iban TEXT DEFAULT '', score INTEGER DEFAULT 0,
+        niveau TEXT DEFAULT '', recommandation TEXT DEFAULT '',
+        resume TEXT DEFAULT '', full_json TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
     c.execute("""CREATE TABLE IF NOT EXISTS watchlist (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        entity      TEXT NOT NULL,
-        entity_type TEXT DEFAULT '',
-        reason      TEXT DEFAULT '',
-        risk_level  TEXT DEFAULT '',
-        added_by    TEXT DEFAULT '',
-        created_at  TEXT DEFAULT CURRENT_TIMESTAMP
-    )""")
-
-    conn.commit()
-    conn.close()
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL, entity_type TEXT DEFAULT '',
+        reason TEXT DEFAULT '', risk_level TEXT DEFAULT '',
+        added_by TEXT DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.commit(); conn.close()
 
 def seed_banks():
-    """Seed all 396 banks from the official French banking registry (Philtr/BdF source)."""
-    conn = get_db()
-    c = conn.cursor()
+    conn = get_db(); c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM banks")
-    if c.fetchone()[0] > 0:
-        conn.close()
-        return
+    if c.fetchone()[0] > 0: conn.close(); return
     banks = [
-        ('18989', 'Aareal bank AG', '29 B RUE D ASTORG', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13678', 'ABN AMRO ASSET BASED FINANCE N.V.', '39 rue Anatole France', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Autre institution', ''),
-        ('11938', 'AGCO FINANCE', 'BP 90 Avenue Blaise Pascal', 'BEAUVAIS CEDEX', '60007', 'FR', '', 'Autre institution', ''),
-        ('45129', 'AGENCE FRANCAISE DE DEVELOPPEMENT', '5 RUE ROLAND BARTHES', 'PARIS 12', '75012', 'FR', '', 'Autre institution', ''),
-        ('16688', 'AGENCE FRANCE LOCALE', 'TOUR OXYGENE 10 BOULEVARD MARIUS VIVIER MERLE', 'LYON', '69003', 'FR', '', 'Etablissement de crédit', ''),
-        ('41829', 'Al Khaliji France', '49 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('26633', 'Allfunds Bank S.A.U.', 'Spaces Opera Garnier 7 Rue Meyerbeer', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('12240', 'Allianz banque', 'TOUR ALLIANZ ONE 1 COURS MICHELET', 'Paris La defense Cedex', '92076', 'FR', '', 'Etablissement de crédit', ''),
-        ('17408', 'ALMA', '176 AVENUE CHARLES DE GAULLE', 'NEUILLY SUR SEINE', '92200', 'FR', '', 'Autre institution', ''),
-        ('16160', 'Alsabail', 'BP 80 7 PLACE BRANT', 'STRASBOURG CEDEX', '67001', 'FR', '', 'Autre institution', ''),
-        ('19530', 'Amundi', '91-93 BOULEVARD PASTEUR', 'PARIS CEDEX 15', '75730', 'FR', '', 'Etablissement de crédit', ''),
-        ('14328', 'Amundi finance', '90 BOULEVARD PASTEUR', 'PARIS 15', '75015', 'FR', '', 'Etablissement de crédit', ''),
-        ('15638', 'Andbank Monaco S.A.M.', '1 avenue des Citronniers', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('18979', 'ARAB BANKING CORPORATION SA', '4 RUE AUBER', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('16298', 'Arkea banking services', 'Tour 5 PLACE DE LA PYRAMIDE', 'PARIS LA DEFENSE CEDEX', '92088', 'FR', '', 'Etablissement de crédit', ''),
-        ('18829', 'Arkea banque entreprises et institutionnels', '3 AVENUE D ALPHASIS CS 96856', 'SAINT GREGOIRE', '35760', 'FR', '', 'Etablissement de crédit', ''),
-        ('14518', 'ARKEA DIRECT BANK', 'La D TOUR ARIANE 5 PLACE DE LA PYRAMIDE', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
-        ('16088', 'Arkea Home Loans SFH', 'BP 10 232 RUE GENERAL PAULET', 'BREST CEDEX 9', '29802', 'FR', '', 'Etablissement de crédit', ''),
-        ('16358', 'Arkea public sector SCF', '1 RUE LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
-        ('15980', 'Arkea credit bail', 'IMMEUBLE LE SEXTANT 255 RUE DE SAINT-MALO', 'RENNES CEDEX', '35700', 'FR', '', 'Autre institution', ''),
-        ('23890', 'Attijariwafa bank europe', '6 RUE CHAUCHAT', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('16668', 'Australia and New Zealand banking group limited', '6 RUE LAMENNAIS', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13558', 'Auxifip', 'CS 30 12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
-        ('16318', 'AXA BANK EUROPE SCF', '203/205 RUE CARNOT', 'FONTENAY SOUS BOIS CEDEX', '94138', 'FR', '', 'Etablissement de crédit', ''),
-        ('12548', 'Axa banque', '203-205 RUE CARNOT', 'FONTENAY-SOUS-BOIS CEDEX', '94138', 'FR', 'AXABFRPP', 'Etablissement de crédit', ''),
-        ('25080', 'Axa banque financement', '203-205 RUE CARNOT', 'FONTENAY-SOUS-BOIS CEDEX', '94138', 'FR', '', 'Etablissement de crédit', ''),
-        ('17188', 'AXA Home Loan SFH', '203 RUE CARNOT', 'FONTENAY-SOUS-BOIS', '94138', 'FR', '', 'Etablissement de crédit', ''),
-        ('11078', 'BAIL ACTEA IMMOBILIER', 'TOUR DE LILLE 60 BOULEVARD DE TURIN', 'LILLE', '59777', 'FR', '', 'Autre institution', ''),
-        ('15970', 'Bail-Actea', '4 PLACE RICHEBE', 'LILLE', '59800', 'FR', '', 'Autre institution', ''),
-        ('14908', 'Banca popolare di Sondrio Suisse', '3 rue Princesse Florestine', 'MONACO CEDEX', '98011', 'MC', '', 'Etablissement de crédit', ''),
-        ('41189', 'Banco Bilbao Vizcaya Argentaria (BBVA)', '29 AVENUE DE L OPERA', 'PARIS 01', '75001', 'FR', 'BBVAFRPP', 'Etablissement de crédit', ''),
-        ('19229', 'Banco de Sabadell', '127 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('41139', 'Banco do Brasil AG', '29 avenue kleber', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('44729', 'Banco Santander SA', '40 RUE DE COURCELLES', 'PARIS 08', '75008', 'FR', 'BSCHFRPP', 'Etablissement de crédit', ''),
-        ('18089', 'Bank Audi France', '73 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14508', 'Bank Julius Baer (Monaco) S.A.M.', '12 BOULEVARD DES MOULINS', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('41259', 'Bank Melli Iran', '43 AVENUE MONTAIGNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('41219', 'BANK OF AMERICA EUROPE', '51 Rue la Boetie', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18769', 'Bank of China limited', '23 AVENUE DE LA GRANDE ARMEE', 'PARIS 16', '75116', 'FR', 'BKCHFRPP', 'Etablissement de crédit', ''),
-        ('19533', 'BANK OF COMMUNICATIONS (LUXEMBOURG) S.A.', 'Avenue des Champs Elysees 90', 'Paris', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14879', 'Bank of India', '4 RUE HALEVY', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('44269', 'Bank Saderat Iran', '16 RUE DE LA PAIX', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('17799', 'Bank Sepah', '20 RUE AUGUSTE VACQUERIE', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('17579', 'Bank Tejarat', '124 RUE DE PROVENCE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('17599', 'Banque Banorient France', '21 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('12579', 'Banque BCP', '16 RUE HEROLD', 'PARIS', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('12179', 'Banque BIA', '67 AVENUE FRANKLIN DELANO ROOSEVELT', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('12468', 'Banque cantonale de Geneve France S.A.', '20 PLACE LOUIS PRADEL', 'LYON 01', '69001', 'FR', '', 'Etablissement de crédit', ''),
-        ('17519', 'Banque centrale de compensation', '18 RUE DU 4 SEPTEMBRE', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('41439', 'Banque Chaabi du Maroc', '49 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('24659', 'Banque Chabrières', '24 RUE AUGUSTE CHABRIÈRES', 'PARIS CEDEX 15', '75737', 'FR', '', 'Etablissement de crédit', ''),
-        ('10188', 'Banque Chalus', '5 PLACE DE JAUDE', 'CLERMONT-FERRAND', '63002', 'FR', '', 'Etablissement de crédit', ''),
-        ('30087', 'Banque CIC Est', '31 RUE JEAN WENGER-VALENTIN', 'STRASBOURG CEDEX 9', '67958', 'FR', '', 'Etablissement de crédit', ''),
-        ('30027', 'Banque CIC Nord Ouest', '33 AVENUE LE CORBUSIER', 'LILLE', '59800', 'FR', '', 'Etablissement de crédit', ''),
-        ('30047', 'Banque CIC Ouest', 'BP 84 2 AVENUE JEAN-CLAUDE BONDUELLE', 'NANTES CEDEX 1', '44040', 'FR', '', 'Etablissement de crédit', ''),
-        ('10057', 'Banque CIC Sud Ouest', 'BP 50 20 QUAI DES CHARTRONS', 'BORDEAUX CEDEX', '33058', 'FR', '', 'Etablissement de crédit', ''),
-        ('10268', 'Banque Courtois', '33 RUE DE REMUSAT', 'TOULOUSE', '31000', 'FR', '', 'Etablissement de crédit', ''),
-        ('44149', 'WORMSER FRERES Banque d escompte', '13 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('30001', 'BANQUE DE FRANCE', '1 RUE LA VRILLIERE', 'PARIS 01', '75001', 'FR', 'BDFEFRPP', 'Banque centrale', ''),
-        ('10548', 'Banque de Savoie', '6 BOULEVARD DU THEATRE', 'CHAMBERY CEDEX', '73024', 'FR', '', 'Etablissement de crédit', ''),
-        ('43030', 'Banque Degroof Petercam France', '44 RUE DE LISBONNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('12879', 'Banque Delubac et Cie', 'BP 53 16 PLACE SALEON TERRAS', 'LE CHEYLARD', '07160', 'FR', '', 'Etablissement de crédit', ''),
-        ('18079', 'Banque des Caraibes', 'BP 55 30 RUE FREBAULT', 'POINTE-A-PITRE CEDEX', '97152', 'FR', '', 'Etablissement de crédit', ''),
-        ('30258', 'Banque BTP', '48 RUE LA PEROUSE', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('13149', 'Banque Edel SNC', '60 RUE BUISSONNIERE', 'LABEGE CEDEX', '31676', 'FR', '', 'Etablissement de crédit', ''),
-        ('11899', 'Banque Europeenne du Credit Mutuel', '4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
-        ('16548', 'Banque europeenne du credit mutuel Monaco', '8 rue Grimaldi', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('11808', 'Banque federative du credit mutuel', 'BP 41 4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
-        ('11449', 'BANQUE FIDUCIAL', '41 RUE DU CAPITAINE GUYNEMER', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
-        ('18719', 'Banque Francaise Commerciale Ocean Indien', '58 RUE ALEXIS DE VILLENEUVE', 'ST DENIS CEDEX', '97404', 'FR', '', 'Etablissement de crédit', ''),
-        ('18869', 'Banque francaise mutualiste', '56 RUE DE LA GLACIERE', 'PARIS', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('16038', 'BANQUE HAVILLAND MONACO S.A.M.', '32/34 bd Princesse Charlotte', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('11438', 'Banque Hottinguer', '63 RUE DE LA VICTOIRE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('40398', 'Banque internationale de commerce BRED', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
-        ('24349', 'Banque J. Safra Sarasin Monaco SA', '15bis-17 avenue Ostende', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('13259', 'Banque Kolb', '1-3 PLACE DU GENERAL DE GAULLE', 'MIRECOURT', '88500', 'FR', '', 'Etablissement de crédit', ''),
-        ('10228', 'Banque Laydernier', '10 AVENUE DU RHONE', 'ANNECY', '74000', 'FR', '', 'Etablissement de crédit', ''),
-        ('17959', 'Banque Michel Inchauspé BAMI', '76 AVENUE DU 8 MAI 1945', 'BAYONNE', '64100', 'FR', '', 'Etablissement de crédit', ''),
-        ('18569', 'Banque Misr', '9 RUE AUBER', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('30788', 'Banque Neuflize OBC', '3 AVENUE HOCHE', 'PARIS 08', '75008', 'FR', 'NEIOFR22', 'Etablissement de crédit', ''),
-        ('19730', 'Banque Nomura France', '7 PLACE D IENA', 'PARIS CEDEX 16', '75773', 'FR', '', 'Etablissement de crédit', ''),
-        ('13489', 'Banque Nuger', 'BP 56 5 PLACE MICHEL DE L HOSPITAL', 'CLERMONT-FERRAND CEDEX', '63002', 'FR', '', 'Etablissement de crédit', ''),
-        ('40978', 'Banque Palatine', '42 RUE D ANJOU', 'PARIS CEDEX 08', '75382', 'FR', '', 'Etablissement de crédit', ''),
-        ('14707', 'Banque populaire Alsace Lorraine Champagne', 'BP 12 3 RUE FRANCOIS DE CUREL', 'METZ CEDEX 1', '57021', 'FR', '', 'Etablissement de crédit', ''),
-        ('10907', 'Banque populaire Aquitaine Centre Atlantique', '10 QUAI DES QUEYRIES', 'BORDEAUX', '33100', 'FR', '', 'Etablissement de crédit', ''),
-        ('16807', 'BANQUE POPULAIRE AUVERGNE RHONE ALPES', 'CS 80 4 BOULEVARD EUGENE DERUELLE', 'Lyon', '69003', 'FR', '', 'Etablissement de crédit', ''),
-        ('10807', 'Banque populaire Bourgogne Franche-Comte', 'BP 31 14 BD DE LA TREMOUILLE', 'DIJON CEDEX', '21008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13507', 'Banque populaire du Nord', '847 AVENUE DE LA REPUBLIQUE', 'MARCQ EN BAROEUL', '59700', 'FR', '', 'Etablissement de crédit', ''),
-        ('16607', 'Banque populaire du Sud', '38 BOULEVARD GEORGES CLEMENCEAU', 'PERPIGNAN CEDEX 09', '66966', 'FR', '', 'Etablissement de crédit', ''),
-        ('13807', 'Banque populaire Grand Ouest', '15 BOULEVARD DE LA BOUTIERE', 'SAINT GREGOIRE', '35760', 'FR', '', 'Etablissement de crédit', ''),
-        ('14607', 'BANQUE POPULAIRE MEDITERRANEE', '457 PROMENADE DES ANGLAIS', 'Nice', '06200', 'FR', '', 'Etablissement de crédit', ''),
-        ('17807', 'Banque populaire Occitane', '33 AVENUE GEORGES POMPIDOU', 'BALMA', '31130', 'FR', '', 'Etablissement de crédit', ''),
-        ('10207', 'Banque populaire Rives de Paris', '76 AVENUE DE FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('18707', 'Banque populaire Val de France', '9 AVENUE NEWTON', 'MONTIGNY LE BRETONNEUX', '78180', 'FR', '', 'Etablissement de crédit', ''),
-        ('11989', 'Banque Pouyanne', '12 PLACE D ARMES', 'ORTHEZ', '64300', 'FR', '', 'Etablissement de crédit', ''),
-        ('13168', 'Banque PSA finance', '2 BOULEVARD DE L EUROPE', 'POISSY', '78300', 'FR', '', 'Etablissement de crédit', ''),
-        ('17649', 'Banque Revillon', '40 RUE LA BOETIE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('10468', 'Banque Rhone-Alpes', '20 BOULEVARD EDOUARD REY', 'GRENOBLE', '38000', 'FR', '', 'Etablissement de crédit', ''),
-        ('19069', 'BANQUE RICHELIEU FRANCE', '1 RUE PAUL CEZANNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13338', 'BANQUE RICHELIEU MONACO', '8 AVENUE DE GRANDE BRETAGNE', 'MONACO CEDEX', '98005', 'MC', '', 'Etablissement de crédit', ''),
-        ('13579', 'Banque Saint-Olive', '84 RUE DU GUESCLIN', 'LYON 06', '69006', 'FR', '', 'Etablissement de crédit', ''),
-        ('17779', 'Banque SBA', '68 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('10558', 'Banque Tarneaud', '2 RUE TURGOT', 'LIMOGES', '87000', 'FR', '', 'Etablissement de crédit', ''),
-        ('30568', 'Banque Transatlantique S.A.', '26 AVENUE FRANKLIN-ROOSEVELT', 'PARIS CEDEX 08', '75372', 'FR', '', 'Etablissement de crédit', ''),
-        ('30588', 'Barclays Bank Ireland', '34/36 avenue de Friedland', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('12448', 'Barclays bank plc monaco', '31 avenue de la costa', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('10108', 'Bayerische landesbank', '203 RUE DU FAUBOURG SAINT HONORE', 'PARIS CEDEX 08', '75380', 'FR', '', 'Etablissement de crédit', ''),
-        ('17619', 'BEMO EUROPE BANQUE PRIVEE', '49 avenue d Iena', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('16218', 'Bforbank', 'TOUR EUROPLAZA 20 AVENUE ANDRE PROTHIN', 'PARIS LA DEFENSE CEDEX', '92927', 'FR', '', 'Etablissement de crédit', ''),
-        ('16158', 'BGFIBANK EUROPE', '10 RUE DU GENERAL FOY', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('15818', 'Binckbank NV', '102 RUE VICTOR HUGO', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Etablissement de crédit', ''),
-        ('12249', 'BMCE BANK INTERNATIONAL PLC', '6 rue Cambaceres', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14670', 'BMW Finance', '5 RUE DES HERONS', 'SAINT QUENTIN EN YVELINES', '78182', 'FR', '', 'Etablissement de crédit', ''),
-        ('30004', 'BNP Paribas', '16 BOULEVARD DES ITALIENS', 'PARIS', '75009', 'FR', 'BNPAFRPP', 'Etablissement de crédit', ''),
-        ('13088', 'BNP PARIBAS ANTILLES-GUYANE', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('18020', 'BNP Paribas Factor', 'SEINE WAY 12 RUE LOUIS BLERIOT', 'Rueil-Malmaison', '92500', 'FR', '', 'Autre institution', ''),
-        ('15668', 'BNP Paribas home loan SFH', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('30958', 'BNP Paribas Lease Group', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
-        ('18029', 'BNP Paribas Personal Finance', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('41919', 'BNP Paribas Reunion', '1 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('41329', 'BNP Paribas securities services', '3 RUE D ANTIN', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('11498', 'BNP Paribas wealth management Monaco', '15/17 avenue d ostende', 'Monaco', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('16168', 'BOA France', '20 RUE DE SAINT PETERSBOURG', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('40618', 'Boursorama', '18 QUAI DU POINT DU JOUR', 'BOULOGNE BILLANCOURT', '92100', 'FR', 'BOUSFRPP', 'Etablissement de crédit', ''),
-        ('16188', 'BPCE', '50 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', 'BPCEFRPP', 'Etablissement de crédit', ''),
-        ('12749', 'BPCE Bail', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('11138', 'BPCE Factor', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('14768', 'BPCE FINANCEMENT', '89 QUAI PANHARD ET LEVASSOR', 'PARIS CEDEX 13', '75634', 'FR', '', 'Autre institution', ''),
-        ('14888', 'BPCE International et Outremer', '88 AVENUE DE FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('11128', 'BPCE lease', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('16190', 'BPCE lease immo', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('16438', 'BPCE SFH', '50 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('44319', 'BPE', '60 RUE DU LOUVRE', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('18359', 'Bpifrance', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Etablissement de crédit', ''),
-        ('19649', 'Bpifrance Regions', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Autre institution', ''),
-        ('10107', 'BRED Banque populaire', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', 'BREDFRPP', 'Etablissement de crédit', ''),
-        ('12779', 'BRED Cofilease', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
-        ('14318', 'BRED Gestion', '18 QUAI DE LA RAPEE', 'PARIS 12', '75012', 'FR', '', 'Etablissement de crédit', ''),
-        ('23779', 'Byblos bank Europe', '15 RUE LORD BYRON', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('11380', 'C.R.H. Caisse de refinancement de l habitat', '3 RUE LA BOETIE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('41539', 'CA Consumer Finance', '1 RUE VICTOR BASH CS 70001', 'MASSY CEDEX', '91068', 'FR', '', 'Etablissement de crédit', ''),
-        ('43799', 'CA INDOSUEZ WEALTH FRANCE', '17 RUE DU DOCTEUR LANCEREAUX', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18129', 'CACEIS Bank', '1 PLACE VALHUBERT', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('15429', 'Caisse agricole Credit Mutuel', '4 RUE FREDERIC GUILLAUME', 'STRASBOURG', '67000', 'FR', '', 'Etablissement de crédit', ''),
-        ('18609', 'Caisse centrale du credit immobilier de France', '26 RUE DE MADRID', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('45539', 'Caisse centrale du credit mutuel', '88-90 RUE CARDINET', 'PARIS CEDEX 17', '75847', 'FR', '', 'Etablissement de crédit', ''),
-        ('11315', 'Caisse d Epargne CEPAC', 'PLACE ESTRANGIN PASTRE', 'MARSEILLE CEDEX 6', '13254', 'FR', '', 'Etablissement de crédit', ''),
-        ('13335', 'Caisse d epargne Aquitaine Poitou-Charentes', '1 PARVIS CORTO MALTESE', 'BORDEAUX CEDEX', '33076', 'FR', '', 'Etablissement de crédit', ''),
-        ('14445', 'Caisse d epargne Bretagne-Pays de Loire', '2 PLACE GRASLIN', 'NANTES', '44003', 'FR', '', 'Etablissement de crédit', ''),
-        ('18315', 'Caisse d epargne Cote d Azur', '455 PROMENADE DES ANGLAIS', 'NICE CEDEX 3', '06205', 'FR', '', 'Etablissement de crédit', ''),
-        ('18715', 'Caisse d epargne Auvergne et du Limousin', '63 RUE MONTLOSIER', 'CLERMONT FERRAND', '63000', 'FR', '', 'Etablissement de crédit', ''),
-        ('12135', 'Caisse d epargne Bourgogne Franche-Comte', '1 ROND POINT DE LA NATION', 'DIJON CEDEX', '21005', 'FR', '', 'Etablissement de crédit', ''),
-        ('13135', 'Caisse d epargne Midi-Pyrenees', '10 AVENUE MAXWELL', 'TOULOUSE', '31100', 'FR', '', 'Etablissement de crédit', ''),
-        ('13825', 'Caisse d epargne Rhone Alpes', '116 COURS LAFAYETTE', 'LYON Cedex 03', '69404', 'FR', '', 'Etablissement de crédit', ''),
-        ('13485', 'Caisse d epargne Languedoc Roussillon', '254 RUE MICHEL TEULE', 'MONTPELLIER CEDEX 4', '34184', 'FR', '', 'Etablissement de crédit', ''),
-        ('15135', 'CAISSE D EPARGNE GRAND EST EUROPE', '1 AVENUE DU RHIN', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
-        ('16275', 'Caisse d epargne Hauts de France', '135 PONT DES FLANDRES', 'Euralille', '59777', 'FR', '', 'Etablissement de crédit', ''),
-        ('17515', 'Caisse d epargne Ile-de-France', '19 RUE DU LOUVRE', 'PARIS CEDEX 1', '75021', 'FR', 'CEPAFRPP', 'Etablissement de crédit', ''),
-        ('14265', 'Caisse d epargne Loire Drome Ardeche', 'ESPACE FAURIEL 17 RUE P. ET D. PONCHARDIER', 'SAINT-ETIENNE CEDEX 2', '42012', 'FR', '', 'Etablissement de crédit', ''),
-        ('14505', 'Caisse d epargne Loire-Centre', '7 RUE D ESCURES', 'ORLEANS', '45000', 'FR', '', 'Etablissement de crédit', ''),
-        ('11425', 'Caisse d epargne Normandie', '151 RUE D UELZEN', 'BOIS GUILLAUME BIHOREL', '76230', 'FR', '', 'Etablissement de crédit', ''),
-        ('15449', 'Caisse de Bretagne de credit mutuel agricole', '1 RUE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
-        ('6', 'Caisse des depots fonds d epargne', '72 AVENUE PIERRE MENDES-FRANCE', 'PARIS CEDEX 13', '75914', 'FR', '', 'Etablissement de crédit', ''),
-        ('40031', 'Caisse des depots section generale', '56 RUE DE LILLE', 'PARIS 07SP', '75356', 'FR', '', 'Etablissement de crédit', ''),
-        ('10278', 'Caisse federale de credit mutuel', '4 RUE FREDERIC', 'STRASBOURG', '67100', 'FR', '', 'Etablissement de crédit', ''),
-        ('15489', 'Caisse federale credit mutuel Maine-Anjou Basse-Normandie', '43 BOULEVARD VOLNEY', 'LAVAL CEDEX 9', '53083', 'FR', '', 'Etablissement de crédit', ''),
-        ('15629', 'Caisse federale credit mutuel Nord Europe', '4 PLACE RICHEBE', 'LILLE CEDEX', '59011', 'FR', '', 'Etablissement de crédit', ''),
-        ('15519', 'Caisse federale credit mutuel Ocean', '34 RUE LEANDRE MERLET', 'LA ROCHE-SUR-YON CEDEX', '85001', 'FR', '', 'Etablissement de crédit', ''),
-        ('18589', 'Caisse francaise de developpement industriel', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('14388', 'Caisse Francaise de Financement Local', '1 PASSERELLE DES REFLETS', 'ISSY-LES-MOULINEAUX', '92130', 'FR', '', 'Etablissement de crédit', ''),
-        ('11306', 'CA mutuel Alpes Provence', '25 CHEMIN DES TROIS CYPRES', 'AIX EN PROVENCE', '13097', 'FR', '', 'Etablissement de crédit', ''),
-        ('17206', 'CA mutuel Alsace Vosges', '1 PLACE DE LA GARE', 'STRASBOURG', '67008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14706', 'CA mutuel Atlantique Vendee', 'LA GARDE ROUTE DE PARIS', 'NANTES CEDEX9', '44949', 'FR', '', 'Etablissement de crédit', ''),
-        ('18706', 'CA mutuel Brie Picardie', '500 RUE SAINT-FUSCIEN', 'AMIENS CEDEX 3', '80095', 'FR', '', 'Etablissement de crédit', ''),
-        ('14806', 'CA mutuel Centre Loire', '8 ALLEE DES COLLEGES', 'BOURGES', '18000', 'FR', '', 'Etablissement de crédit', ''),
-        ('17806', 'CA mutuel Centre-Est', '1 RUE PIERRE TRUCHIS DE LAYS', 'CHAMPAGNE AU MONT D OR', '69410', 'FR', '', 'Etablissement de crédit', ''),
-        ('11706', 'CA mutuel Charente-Maritime Deux-Sevres', '14 RUE LOUIS TARDY', 'LAGORD', '17140', 'FR', '', 'Etablissement de crédit', ''),
-        ('12406', 'CA mutuel Charente-Perigord', 'RUE D EPAGNAC', 'SOYAUX', '16800', 'FR', '', 'Etablissement de crédit', ''),
-        ('13306', 'CA mutuel Aquitaine', '106 QUAI DE BACALAN', 'BORDEAUX CEDEX', '33076', 'FR', '', 'Etablissement de crédit', ''),
-        ('13606', 'CA mutuel Ille-et-Vilaine', '4 RUE LOUIS BRAILLE', 'ST JACQUES DE LA LANDE', '35136', 'FR', '', 'Etablissement de crédit', ''),
-        ('16806', 'CA mutuel Centre France', '3 AVENUE DE LA LIBERATION', 'CLERMONT FERRAND CEDEX1', '63045', 'FR', '', 'Etablissement de crédit', ''),
-        ('11006', 'CA mutuel Champagne-Bourgogne', '269 FAUBOURG CRONCELS', 'TROYES CEDEX', '10080', 'FR', '', 'Etablissement de crédit', ''),
-        ('12506', 'CA mutuel Franche-Comte', '11 AVENUE ELISEE CUSENIER', 'BESANCON CEDEX 9', '25084', 'FR', '', 'Etablissement de crédit', ''),
-        ('17906', 'CA mutuel Anjou et du Maine', '40 RUE PREMARTINE', 'LE MANS CEDEX 9', '72083', 'FR', '', 'Etablissement de crédit', ''),
-        ('12006', 'CA mutuel Corse', '1 AVENUE NAPOLEON III', 'AJACCIO CEDEX', '20193', 'FR', '', 'Etablissement de crédit', ''),
-        ('14006', 'CA mutuel Guadeloupe', 'PETIT PEROU', 'ABYMES CEDEX', '97176', 'FR', '', 'Etablissement de crédit', ''),
-        ('19806', 'CA mutuel Martinique et Guyane', 'RUE CASE NEGRE PLACE D ARMES', 'LE LAMENTIN CEDEX 2', '97232', 'FR', '', 'Etablissement de crédit', ''),
-        ('19906', 'CA mutuel Reunion', 'CITE DES LAURIERS', 'SAINT-DENIS CEDEX', '97462', 'FR', '', 'Etablissement de crédit', ''),
-        ('19406', 'CA mutuel Touraine et Poitou', '18 RUE SALVADOR ALLENDE', 'POITIERS CEDEX', '86008', 'FR', '', 'Etablissement de crédit', ''),
-        ('16106', 'CA mutuel Lorraine', 'CS 71700', 'NANCY CEDEX', '54017', 'FR', '', 'Etablissement de crédit', ''),
-        ('16606', 'CA mutuel Normandie', '15 ESPL. BRILLAUD DE LAUJARDIERE', 'CAEN CEDEX', '14050', 'FR', '', 'Etablissement de crédit', ''),
-        ('18206', 'CA mutuel Paris et Ile-de-France', '26 QUAI DE LA RAPEE', 'PARIS CEDEX 12', '75596', 'FR', '', 'Etablissement de crédit', ''),
-        ('12206', 'CA mutuel Cotes-d Armor', 'LA CROIX TUAL', 'PLOUFRAGAN', '22440', 'FR', '', 'Etablissement de crédit', ''),
-        ('18106', 'CA mutuel des Savoie', '4 AVENUE DU PRE-FELIN', 'ANNECY LE VIEUX', '74985', 'FR', '', 'Etablissement de crédit', ''),
-        ('19506', 'CA mutuel Centre Ouest', '29 BOULEVARD DE VANTEAUX', 'LIMOGES CEDEX', '87044', 'FR', '', 'Etablissement de crédit', ''),
-        ('12906', 'CA mutuel Finistere', '7 ROUTE DU LOCH', 'QUIMPER CEDEX 9', '29555', 'FR', '', 'Etablissement de crédit', ''),
-        ('13506', 'CA mutuel Languedoc', 'AVENUE DE MONPELLIERET', 'LATTES CEDEX', '34977', 'FR', '', 'Etablissement de crédit', ''),
-        ('16006', 'CA mutuel Morbihan', 'AVENUE DE KERANGUEN', 'VANNES CEDEX 9', '56956', 'FR', '', 'Etablissement de crédit', ''),
-        ('10206', 'CA mutuel Nord Est', '25 RUE LIBERGIER', 'REIMS CEDEX', '51088', 'FR', '', 'Etablissement de crédit', ''),
-        ('14506', 'CA mutuel Loire Haute-Loire', '94 RUE BERGSON', 'ST ETIENNE Cedex 1', '42007', 'FR', '', 'Etablissement de crédit', ''),
-        ('16706', 'CA mutuel Nord de France', '10 AVENUE FOCH', 'LILLE CEDEX', '59020', 'FR', '', 'Etablissement de crédit', ''),
-        ('11206', 'CA mutuel Nord Midi-Pyrenees', '219 AVENUE FRANCOIS VERDIER', 'ALBI CEDEX 9', '81022', 'FR', '', 'Etablissement de crédit', ''),
-        ('18306', 'CA mutuel Normandie-Seine', 'CS 70800', 'BOIS GUILLAUME CEDEX', '76238', 'FR', '', 'Etablissement de crédit', ''),
-        ('19106', 'CA mutuel Provence-Cote d Azur', 'AVENUE PAUL ARENE', 'DRAGUIGNAN', '83300', 'FR', '', 'Etablissement de crédit', ''),
-        ('16906', 'CA mutuel Pyrenees-Gascogne', '11 BOULEVARD PRESIDENT KENNEDY', 'TARBES CEDEX', '65003', 'FR', '', 'Etablissement de crédit', ''),
-        ('13906', 'CA mutuel Sud Rhone-Alpes', '12 PLACE DE LA RESISTANCE', 'GRENOBLE', '38000', 'FR', '', 'Etablissement de crédit', ''),
-        ('17106', 'CA mutuel Sud-Mediterranee', '30 RUE PIERRE BRETONNEAU', 'PERPIGNAN CEDEX', '66832', 'FR', '', 'Etablissement de crédit', ''),
-        ('13106', 'CA mutuel Toulouse 31', '6-7 PLACE JEANNE D ARC', 'TOULOUSE CEDEX 6', '31005', 'FR', '', 'Etablissement de crédit', ''),
-        ('14406', 'CA mutuel Val de France', '1 RUE DANIEL BOUTET', 'CHARTRES CEDEX', '28023', 'FR', '', 'Etablissement de crédit', ''),
-        ('13798', 'Caisse solidaire', '235 BOULEVARD PAUL PAINLEVE', 'LILLE', '59000', 'FR', '', 'Etablissement de crédit', ''),
-        ('12619', 'Caixa geral de depositos S.A.', '38 RUE DE PROVENCE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('12933', 'Caixabank', '2 rue de Goethe', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('14648', 'Capitole Finance Tofinso', '2839 AVENUE DE LA LAURAGAISE', 'LABEGE CEDEX', '31682', 'FR', '', 'Etablissement de crédit', ''),
-        ('19870', 'Carrefour banque', '9-13 AVENUE DU LAC', 'EVRY-COURCOURONNES', '91000', 'FR', '', 'Etablissement de crédit', ''),
-        ('11307', 'CASDEN Banque Populaire', '91 COURS DES ROCHES', 'CHAMPS SUR MARNE', '77420', 'FR', '', 'Etablissement de crédit', ''),
-        ('12739', 'CFM Indosuez Wealth', '11 boulevard albert 1er', 'Monaco cedex', '98012', 'MC', '', 'Etablissement de crédit', ''),
-        ('17208', 'CHECKOUT', '52 BOULEVARD DE SEBASTOPOL', 'PARIS', '75003', 'FR', '', 'Autre institution', ''),
-        ('18233', 'CHINA CONSTRUCTION BANK EUROPE S.A', '86-88 Boulevard Haussmann', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('10918', 'Cholet Dupont', '16 PLACE DE LA MADELEINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('16700', 'Cicobail', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('14658', 'CIF EUROMORTGAGE', '26 RUE DE MADRID', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('11689', 'CITIBANK EUROPE', '21-25 Rue Balzac', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14218', 'Claas financial services', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
-        ('22040', 'Confederation Nationale du Credit Mutuel', '88-90 Rue Cardinet', 'Paris cedex 17', '75847', 'FR', '', 'Etablissement de crédit', ''),
-        ('10218', 'Cooperatieve Rabobank U.A.', '69 BOULEVARD HAUSSMANN', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14940', 'Cofidis', '61 AVENUE HALLEY', 'VILLENEUVE D ASCQ CEDEX', '59866', 'FR', '', 'Etablissement de crédit', ''),
-        ('17629', 'Commerzbank ag', '23 rue de la Paix', 'PARIS CEDEX 02', '75084', 'FR', '', 'Etablissement de crédit', ''),
-        ('30051', 'Compagnie de financement foncier', '19 RUE DES CAPUCINES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('18189', 'Compagnie generale de credit aux particuliers Credipar', '2 BOULEVARD DE L EUROPE', 'POISSY Cedex', '78307', 'FR', '', 'Etablissement de crédit', ''),
-        ('31489', 'Credit agricole corporate and investment bank', '12 PLACE DES ETATS-UNIS', 'Montrouge Cedex', '92547', 'FR', '', 'Etablissement de crédit', ''),
-        ('15898', 'Credit Agricole home loan SFH', '12 PLACE DES ETATS UNIS', 'MONTROUGE', '92120', 'FR', '', 'Etablissement de crédit', ''),
-        ('16850', 'Credit agricole leasing & factoring', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
-        ('16468', 'Credit Agricole Public Sector SCF', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92127', 'FR', '', 'Etablissement de crédit', ''),
-        ('30006', 'Credit Agricole S.A.', '12 PLACE DES ETATS UNIS', 'MONTROUGE', '92120', 'FR', 'AGRIFRPP', 'Etablissement de crédit', ''),
-        ('42559', 'Credit cooperatif', '12 BOULEVARD PESARO', 'NANTERRE CEDEX', '92024', 'FR', 'CCOPFRPP', 'Etablissement de crédit', ''),
-        ('30076', 'Credit du Nord', '28 PLACE RIHOUR', 'LILLE CEDEX', '59023', 'FR', 'NORDFRPP', 'Etablissement de crédit', ''),
-        ('43199', 'Credit Foncier de France', '19 RUE DES CAPUCINES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('15149', 'Credit foncier et communal Alsace et Lorraine', '1 RUE DU DOME', 'STRASBOURG CEDEX', '67003', 'FR', '', 'Etablissement de crédit', ''),
-        ('16718', 'Credit Immobilier de France Developpement', '26/28 RUE DE MADRID', 'PARIS CEDEX 08', '75384', 'FR', '', 'Autre institution', ''),
-        ('30066', 'Credit industriel et commercial CIC', '6 AVENUE DE PROVENCE', 'PARIS 09', '75009', 'FR', 'CMCIFRPP', 'Etablissement de crédit', ''),
-        ('30002', 'CREDIT LYONNAIS LCL', '18 rue de la Republique', 'LYON', '69002', 'FR', 'CRLYFRPP', 'Etablissement de crédit', ''),
-        ('10160', 'Credit mobilier de Monaco', '15 avenue de Grande-Bretagne', 'MONACO CEDEX', '98002', 'MC', '', 'Etablissement de crédit', ''),
-        ('15208', 'Credit municipal de Paris', '55 RUE DES FRANCS-BOURGEOIS', 'PARIS CEDEX 04', '75181', 'FR', '', 'Etablissement de crédit', ''),
-        ('15589', 'Credit mutuel Arkea', '1 RUE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
-        ('11978', 'Credit Mutuel Factoring', 'TOUR KUPKA A 18 RUE HOCHE', 'PARIS LA DEFENSE CEDEX', '92980', 'FR', '', 'Etablissement de crédit', ''),
-        ('15848', 'Credit Mutuel Home Loan SFH', '6 AVENUE DE PROVENCE', 'PARIS CEDEX 9', '75452', 'FR', '', 'Etablissement de crédit', ''),
-        ('13070', 'Credit Mutuel Leasing', '12 RUE GAILLON', 'PARIS CEDEX 02', '75107', 'FR', '', 'Etablissement de crédit', ''),
-        ('11600', 'Credit mutuel Real Estate Lease', '4 RUE GAILLON', 'PARIS CEDEX 02', '75107', 'FR', '', 'Etablissement de crédit', ''),
-        ('18169', 'Credit suisse Luxembourg S.A.', '25 avenue Kleber', 'PARIS', '75016', 'FR', '', 'Etablissement de crédit', ''),
-        ('16000', 'Diac', '14 AVENUE DU PAVE NEUF', 'NOISY-LE-GRAND CEDEX', '93168', 'FR', '', 'Etablissement de crédit', ''),
-        ('17290', 'Dexia credit local', '1 PASSERELLE DES REFLETS', 'LA DEFENSE CEDEX', '92913', 'FR', '', 'Etablissement de crédit', ''),
-        ('16048', 'Ebi SA', 'IMMEUBLE CONCORDE', 'PARIS LA DEFENSE CEDEX', '92057', 'FR', '', 'Etablissement de crédit', ''),
-        ('16658', 'EDENRED PAIEMENT', '166 BOULEVARD GABRIEL PERI', 'MALAKOFF', '92240', 'FR', '', 'Autre institution', ''),
-        ('42529', 'Edmond de Rothschild France', '47 RUE DU FAUBOURG SAINT HONORE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('11668', 'Edmond de Rothschild Monaco', 'Carlo Les Terrasses 2 avenue de Monte', 'MONACO CEDEX', '98006', 'MC', '', 'Etablissement de crédit', ''),
-        ('18759', 'EFG Bank Monaco', '15 avenue d Ostende Monte Carlo', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('22970', 'Epargne credit des militaires', 'QUARTIER SAINTE MUSSE RUE NICOLAS APPERT', 'Toulon', '83100', 'FR', '', 'Etablissement de crédit', ''),
-        ('17979', 'EUROPE ARAB BANK SA', '41 AVENUE DE FRIEDLAND', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13580', 'FACTOFRANCE', 'TOUR D2 17 BIS PLACE DES REFLETS', 'PARIS-LA DEFENSE CEDEX', '92988', 'FR', '', 'Etablissement de crédit', ''),
-        ('12478', 'FCE bank plc', '34 rue de la Croix de Fer', 'ST GERMAIN EN LAYE CEDEX', '78174', 'FR', '', 'Etablissement de crédit', ''),
-        ('15900', 'FEDERAL FINANCE', '1 ALLEE LOUIS LICHOU', 'LE RELECQ KERHUON', '29480', 'FR', '', 'Etablissement de crédit', ''),
-        ('14628', 'FLOA', '71 RUE LUCIEN FAURE', 'BORDEAUX', '33300', 'FR', '', 'Etablissement de crédit', ''),
-        ('16760', 'Franfinance', '59 AVENUE DE CHATOU', 'RUEIL-MALMAISON CEDEX', '92853', 'FR', '', 'Autre institution', ''),
-        ('18689', 'Fransabank France S.A.', '104 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('16208', 'GE SCF', 'TOUR EUROPLAZA 20 AVENUE ANDRE PROTHIN', 'PARIS-LA-DEFENSE CEDEX', '92063', 'FR', '', 'Etablissement de crédit', ''),
-        ('19269', 'Genebanque', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
-        ('17660', 'Genefim', '29 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('25533', 'Goldman Sachs Bank Europe SE', '5 Avenue Kleber', 'PARIS', '75116', 'FR', 'GOLDFRPP', 'Etablissement de crédit', ''),
-        ('14120', 'GRESHAM Banque', '20 RUE DE LA BAUME', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18059', 'HSBC Bank Plc Paris Branch', '38 AVENUE KLEBER', 'PARIS', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('30056', 'HSBC Continental Europe', '38 AVENUE KLEBER', 'PARIS', '75116', 'FR', 'CCFRFRPP', 'Etablissement de crédit', ''),
-        ('13888', 'HSBC Factoring France', '38 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Autre institution', ''),
-        ('14398', 'HSBC Leasing France', '38 AVENUE KLEBER', 'PARIS 16', '75116', 'FR', '', 'Autre institution', ''),
-        ('16058', 'HSBC SFH FRANCE', 'IMMEUBLE COEUR DEFENSE 110 ESPLANADE GENERAL DE GAULLE', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
-        ('16030', 'IBM France financement', '17 AVENUE DE L EUROPE', 'BOIS-COLOMBES CEDEX', '92275', 'FR', '', 'Autre institution', ''),
-        ('11833', 'ICBC Europe SA', '73 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'ICBKFRPP', 'Etablissement de crédit', ''),
-        ('30438', 'ING Bank NV', '40 AVENUE DES TERROIRS DE FRANCE', 'PARIS 12', '75012', 'FR', 'INGBFRPP', 'Etablissement de crédit', ''),
-        ('12818', 'IFCIC', '41 RUE DE LA CHAUSSEE D ANTIN', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('10128', 'Intesa Sanpaolo SpA', '62 RUE DE RICHELIEU', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('16433', 'J.P. Morgan AG', '14 Place Vendome', 'PARIS', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('12978', 'JCB Finance', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
-        ('15458', 'Joh. Berenberg Gossler & Co. KG', '48 AVENUE VICTOR HUGO', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('14108', 'John Deere financial', 'Rue du Paradis', 'Saint Jean de la ruelle', '45140', 'FR', '', 'Autre institution', ''),
-        ('30628', 'JPMorgan Chase bank', '14 PLACE VENDOME', 'PARIS 01', '75001', 'FR', 'CHASFRPP', 'Etablissement de crédit', ''),
-        ('27800', 'KBC bank', '6 RUE NICOLAS APPERT', 'LILLE CEDEX', '59030', 'FR', '', 'Etablissement de crédit', ''),
-        ('14989', 'KEB Hana Bank', '38 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('20041', 'La Banque Postale', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', 'PSSTFRPP', 'Etablissement de crédit', ''),
-        ('16178', 'LA BANQUE POSTALE CONSUMER FINANCE', '1-3 AVENUE FRANCOIS MITTERRAND', 'SAINT DENIS', '93200', 'FR', '', 'Autre institution', ''),
-        ('16608', 'LA BANQUE POSTALE HOME LOAN SFH', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', '', 'Etablissement de crédit', ''),
-        ('16478', 'La Banque Postale Leasing & Factoring', '115 RUE DE SEVRES', 'PARIS CEDEX 06', '75275', 'FR', '', 'Autre institution', ''),
-        ('16068', 'Helaba Landesbank Hessen-Thuringen', '118 AVENUE DES CHAMPS ELYSEES', 'PARIS', '75108', 'FR', '', 'Etablissement de crédit', ''),
-        ('19063', 'Landesbank Saar SAARLB', '2 PLACE RAYMOND MONDON', 'METZ', '57000', 'FR', '', 'Etablissement de crédit', ''),
-        ('30748', 'Lazard Freres Banque', '121 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'LAZAFRPP', 'Etablissement de crédit', ''),
-        ('13150', 'LixxBail', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
-        ('44449', 'LixxCredit', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Autre institution', ''),
-        ('10800', 'Locam', '29 RUE LEON BLUM', 'ST ETIENNE', '42000', 'FR', '', 'Autre institution', ''),
-        ('16773', 'Lombard Odier Europe S.A', '8 RUE ROYALE', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('21670', 'Loomis FX Gold and Services', '42 RUE BENOIT MALON', 'Gentilly', '94250', 'FR', '', 'Etablissement de crédit', ''),
-        ('10096', 'Lyonnaise de banque', '8 RUE DE LA REPUBLIQUE', 'LYON CEDEX 01', '69207', 'FR', '', 'Etablissement de crédit', ''),
-        ('16908', 'Ma French Bank', '115 RUE DE SEVRES', 'Paris Cedex 06', '75275', 'FR', '', 'Etablissement de crédit', ''),
-        ('25833', 'Macquarie bank Europe DAC', '41 Avenue George V', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('11508', 'MARKET PAY', '33 AVENUE EMILE ZOLA', 'Boulogne-Billancourt', '92100', 'FR', '', 'Autre institution', ''),
-        ('15148', 'Mediobanca', '43 RUE DE LA BIENFAISANCE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18789', 'Mega international commercial bank Co Ltd', '131 RUE DE TOLBIAC', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('17338', 'MEMO BANK', '8 RUE DU FBG POISSONNIERE', 'PARIS', '75010', 'FR', '', 'Etablissement de crédit', ''),
-        ('16233', 'Mercedes-Benz bank AG', '14 place claudel', 'Montigny le bretonneux', '78180', 'FR', '', 'Etablissement de crédit', ''),
-        ('24599', 'Milleis Banque', '32 AVENUE GEORGE V', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('19973', 'Mirabaud & Cie Europe SA', '13 AVENUE HOCHE', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18529', 'Mizuho bank ltd Paris branch', '40 RUE WASHINGTON', 'PARIS CEDEX 08', '75408', 'FR', '', 'Etablissement de crédit', ''),
-        ('16989', 'Mobilis banque', '64 BOULEVARD DE CAMBRAI', 'ROUBAIX', '59100', 'FR', '', 'Etablissement de crédit', ''),
-        ('14690', 'Monabanq', '61 AVENUE HALLEY', 'VILLENEUVE D ASCQ', '59650', 'FR', '', 'Etablissement de crédit', ''),
-        ('41249', 'MUFG Bank Ltd', '18 rue du Quatre Septembre', 'PARIS', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('42799', 'My Money Bank', '20 AV ANDRE PROTHIN', 'PARIS LA DEFENSE CEDEX', '92063', 'FR', '', 'Etablissement de crédit', ''),
-        ('17549', 'Naticredibail', '12 RUE DU PORT', 'NANTERRE', '92000', 'FR', '', 'Etablissement de crédit', ''),
-        ('14139', 'National bank of Pakistan', '25 RUE JEAN GIRAUDOUX', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('30007', 'Natixis', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', 'NATXFRPP', 'Etablissement de crédit', ''),
-        ('16278', 'Natixis Asset Management Finance', '59 AVENUE PIERRE MENDES FRANCE', 'PARIS', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('11470', 'Natixis Coficine', '6 RUE DE L AMIRAL HAMELIN', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('15930', 'NATIXIS PAYMENT SOLUTIONS', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Etablissement de crédit', ''),
-        ('18919', 'NATIXIS WEALTH MANAGEMENT', '115 RUE MONTMARTRE', 'PARIS', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('23133', 'NATWEST MARKETS N.V.', '32 rue de Monceau', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('41639', 'NBK France SA', '90 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('45850', 'Oddo BHF SCA', '12 BOULEVARD DE LA MADELEINE', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('12869', 'ONEY BANK', '40 AVENUE DE FLANDRE', 'CROIX CEDEX', '59964', 'FR', '', 'Etablissement de crédit', ''),
-        ('17839', 'Opel Bank', '2 BOULEVARD DE L EUROPE', 'Poissy', '78300', 'FR', '', 'Etablissement de crédit', ''),
-        ('18370', 'ORANGE BANK', '67 RUE ROBESPIERRE', 'MONTREUIL', '93100', 'FR', '', 'Etablissement de crédit', ''),
-        ('27589', 'Oudart S.A.', '10 A RUE DE LA PAIX', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('21349', 'Parilease', '41 AVENUE DE L OPERA', 'PARIS 02', '75002', 'FR', '', 'Autre institution', ''),
-        ('17288', 'PICTET & CIE EUROPE S.A. Monaco', 'Villa Miraflores avenue Saint-Michel 02', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('15068', 'Pictet & Cie Europe SA', '34 AVENUE DE MESSINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14749', 'PSA BANQUE FRANCE', '2 BOULEVARD DE L EUROPE', 'POISSY Cedex', '78307', 'FR', '', 'Etablissement de crédit', ''),
-        ('17919', 'Qatar national bank', '65 AVENUE D IENA', 'PARIS 16', '75116', 'FR', '', 'Etablissement de crédit', ''),
-        ('43789', 'Quilvest banque privee', '243 BOULEVARD SAINT GERMAIN', 'PARIS 07', '75007', 'FR', '', 'Etablissement de crédit', ''),
-        ('15298', 'RBC Investor services bank France SA', '105 RUE REAUMUR', 'PARIS 02', '75002', 'FR', '', 'Etablissement de crédit', ''),
-        ('11188', 'RCI Banque', '15 RUE D UZES', 'PARIS', '75002', 'FR', 'RCIEFR22', 'Etablissement de crédit', ''),
-        ('28233', 'REVOLUT PAYMENTS UAB', '3 RUE DE STOCKHOLM', 'PARIS', '75008', 'FR', '', 'Autre institution', ''),
-        ('27033', 'Riverbank S.A.', '9 rue Christophe Colomb', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13369', 'Rothschild Martin Maurel', '29 AVENUE DE MESSINE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14478', 'ROTHSCHILD & CO WEALTH MANAGEMENT MONACO', '11 BOULEVARD DES MOULINS', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('12098', 'SOCIETE DE BANQUE MONACO', '27 avenue de la Costa', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('16788', 'Santander Consumer Banque', '26 QUAI MICHELET', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Etablissement de crédit', ''),
-        ('28533', 'Solarisbank AG', '7 RUE MEYERBEER', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('16588', 'SFIL', '1-3 RUE DU PASSEUR DE BOULOGNE', 'ISSY LES MOULINEAUX CEDEX 9', '92861', 'FR', '', 'Etablissement de crédit', ''),
-        ('43629', 'Societe anonyme de credit a l industrie francaise CALIF', '189 RUE D AUBERVILLIERS', 'PARIS CEDEX 18', '75886', 'FR', '', 'Etablissement de crédit', ''),
-        ('30003', 'Societe generale', '189 RUE D AUBERVILLIERS', 'PARIS CEDEX 18', '75886', 'FR', 'SOGEFRPP', 'Etablissement de crédit', ''),
-        ('17060', 'SOCIETE GENERALE Factoring', '3 RUE FRANCIS DE PRESSENSE', 'LA PLAINE ST DENIS CEDEX', '93577', 'FR', '', 'Etablissement de crédit', ''),
-        ('13368', 'Societe generale private banking Monaco', '11 AVENUE DE GRANDE BRETAGNE', 'MONACO', '98007', 'MC', '', 'Etablissement de crédit', ''),
-        ('15968', 'Societe Generale SCF', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
-        ('16228', 'Societe generale SFH', '17 COURS VALMY', 'PUTEAUX', '92800', 'FR', '', 'Etablissement de crédit', ''),
-        ('30077', 'Societe marseillaise de credit', '75 RUE PARADIS', 'MARSEILLE 06', '13006', 'FR', '', 'Etablissement de crédit', ''),
-        ('12280', 'Socram banque', '2 RUE DU 24 FEVRIER', 'NIORT CEDEX 9', '79092', 'FR', '', 'Etablissement de crédit', ''),
-        ('19460', 'Sofax banque', '2 PLACE JEAN MILLIER', 'COURBEVOIE', '92400', 'FR', '', 'Etablissement de crédit', ''),
-        ('19259', 'Sogefimur', '29 BOULEVARD HAUSSMANN', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('12438', 'SOFIAP', '7 RUE DE LA PIERRE LEVEE', 'PARIS 11', '75011', 'FR', '', 'Autre institution', ''),
-        ('21570', 'Societe financiere de la NEF', '8 AVENUE DES CANUTS', 'VAULX EN VELIN', '69120', 'FR', '', 'Etablissement de crédit', ''),
-        ('15250', 'SMBC Bank International plc', '1-3-5 RUE PAUL CEZANNE', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13833', 'Stifel Europe Bank AG', '123 RUE DE BERRI', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('14568', 'Svenska handelsbanken AB', '7 RUE DROUOT', 'PARIS 09', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('17328', 'SWAN', '95 AV DU PRESIDENT WILSON', 'MONTREUIL', '93100', 'FR', '', 'Autre institution', ''),
-        ('11238', 'SwissLife banque privee', '7 PLACE VENDOME', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('13733', 'The bank of New York Mellon SA/NV', '7 RUE SCRIBE', 'PARIS', '75109', 'FR', '', 'Etablissement de crédit', ''),
-        ('16618', 'The Export-Import Bank of China', '62 rue de Courcelles', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('15258', 'Bank of Ireland', '20 avenue Franklin Roosevelt', 'PARIS', '75108', 'FR', '', 'Etablissement de crédit', ''),
-        ('13878', 'Toyota kreditbank GmbH', '36 BOULEVARD DE LA REPUBLIQUE', 'VAUCRESSON', '92420', 'FR', '', 'Etablissement de crédit', ''),
-        ('16798', 'Treezor SAS', '94 RUE DE VILLIERS', 'LEVALLOIS PERRET', '92300', 'FR', '', 'Autre institution', ''),
-        ('43849', 'Tunisian foreign bank', '19 RUE DES PYRAMIDES', 'PARIS 01', '75001', 'FR', '', 'Etablissement de crédit', ''),
-        ('30758', 'UBS France S.A.', '69 BOULEVARD HAUSSMANN', 'PARIS 08', '75008', 'FR', 'UBSWFRPP', 'Etablissement de crédit', ''),
-        ('11999', 'UBS Monaco s.a.', '2 avenue de Grande Bretagne', 'MONACO CEDEX', '98007', 'MC', '', 'Etablissement de crédit', ''),
-        ('24333', 'UBS Europe SE', '69 Boulevard Haussmann', 'PARIS', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('11998', 'Unicredit bank AG', '117 avenue des Champs Elysees', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('13528', 'Unicredit SpA', '117 AVENUE DES CHAMPS ELYSEES', 'PARIS 08', '75008', 'FR', '', 'Etablissement de crédit', ''),
-        ('18280', 'Unifergie', '12 PLACE DES ETATS-UNIS', 'MONTROUGE CEDEX', '92548', 'FR', '', 'Etablissement de crédit', ''),
-        ('16648', 'UNION BANCAIRE PRIVEE UBP SA Monaco', '11 bld des Moulins', 'MONACO', '98000', 'MC', '', 'Etablissement de crédit', ''),
-        ('43899', 'Union de banques arabes et francaises UBAF', '2 AVENUE GAMBETTA', 'PARIS LA DEFENSE CEDEX', '92066', 'FR', '', 'Etablissement de crédit', ''),
-        ('19570', 'Union financiere de France banque', '32 AVENUE D IENA', 'PARIS CEDEX 16', '75783', 'FR', '', 'Etablissement de crédit', ''),
-        ('15128', 'Volkswagen bank GmbH', 'PARC D AFFAIRES SILIC', 'VILLEPINTE', '93420', 'FR', '', 'Etablissement de crédit', ''),
-        ('14633', 'Western union international bank GmbH', '5-6 PLACE DE L IRIS', 'LA DEFENSE Cedex', '92095', 'FR', '', 'Etablissement de crédit', ''),
-        ('16488', 'YOUNITED', '21 RUE DE CHATEAUDUN', 'PARIS', '75009', 'FR', '', 'Etablissement de crédit', ''),
-        ('12558', 'VFS Finance France', 'TOUR ATLANTIQUE 1 PLACE DE LA PYRAMIDE', 'PARIS', '92911', 'FR', '', 'Autre institution', ''),
-        ('16528', 'XPOLLENS', 'RUE RAYMOND LOSSERAND', 'PARIS 14', '75014', 'FR', '', 'Autre institution', ''),
-        ('17018', 'YAMAHA MOTOR FINANCE FRANCE', '5 AVENUE DU FIEF', 'CERGY-PONTOISE CEDEX', '95078', 'FR', '', 'Autre institution', ''),
-        ('19940', 'BPCE ENERGECO', '30 AVENUE PIERRE MENDES FRANCE', 'PARIS 13', '75013', 'FR', '', 'Autre institution', ''),
-        ('19190', 'BPCE LEASE REUNION', '32 BOULEVARD DU CHAUDRON', 'SAINT DENIS MESSAG CEDEX 9', '97408', 'FR', '', 'Autre institution', ''),
-        ('18359', 'Bpifrance', '27-31 AVENUE DU GENERAL LECLERC', 'MAISONS-ALFORT', '94710', 'FR', '', 'Etablissement de crédit', ''),
-        ('15468', 'Scania finance France', 'ZONE INDUSTRIELLE D ECOUFLANT', 'ANGERS CEDEX 01', '49009', 'FR', '', 'Autre institution', ''),
-        ('18230', 'SOFIPROTEOL', '11 RUE DE MONCEAU', 'PARIS', '75008', 'FR', '', 'Autre institution', ''),
-        ('17439', 'SOFIDER', '3 RUE LABOURDONNAIS', 'SAINT-DENIS CEDEX', '97477', 'FR', '', 'Etablissement de crédit', ''),
-        ('60220', 'Caisse de developpement de la Corse', '6 AVENUE DE PARIS', 'AJACCIO CEDEX 01', '20176', 'FR', '', 'Autre institution', ''),
-        ('11190', 'Caisse de garantie du logement locatif social', '10 avenue Ledru-Rollin', 'PARIS CEDEX 12', '75579', 'FR', '', 'Autre institution', ''),
+        ('18989','Aareal bank AG','29 B RUE D ASTORG','PARIS 08','75008','FR','','Etablissement de crédit',''),
+        ('30004','BNP Paribas','16 BOULEVARD DES ITALIENS','PARIS','75009','FR','BNPAFRPP','Etablissement de crédit',''),
+        ('30001','BANQUE DE FRANCE','1 RUE LA VRILLIERE','PARIS 01','75001','FR','BDFEFRPP','Banque centrale',''),
+        ('30003','Societe generale','189 RUE D AUBERVILLIERS','PARIS CEDEX 18','75886','FR','SOGEFRPP','Etablissement de crédit',''),
+        ('30002','CREDIT LYONNAIS LCL','18 rue de la Republique','LYON','69002','FR','CRLYFRPP','Etablissement de crédit',''),
+        ('30006','Credit Agricole S.A.','12 PLACE DES ETATS UNIS','MONTROUGE','92120','FR','AGRIFRPP','Etablissement de crédit',''),
+        ('40618','Boursorama','18 QUAI DU POINT DU JOUR','BOULOGNE BILLANCOURT','92100','FR','BOUSFRPP','Etablissement de crédit',''),
+        ('20041','La Banque Postale','115 RUE DE SEVRES','PARIS CEDEX 06','75275','FR','PSSTFRPP','Etablissement de crédit',''),
+        ('16188','BPCE','50 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','BPCEFRPP','Etablissement de crédit',''),
+        ('10107','BRED Banque populaire','18 QUAI DE LA RAPEE','PARIS 12','75012','FR','BREDFRPP','Etablissement de crédit',''),
+        ('30007','Natixis','30 AVENUE PIERRE MENDES FRANCE','PARIS 13','75013','FR','NATXFRPP','Etablissement de crédit',''),
+        ('30066','Credit industriel et commercial CIC','6 AVENUE DE PROVENCE','PARIS 09','75009','FR','CMCIFRPP','Etablissement de crédit',''),
+        ('30076','Credit du Nord','28 PLACE RIHOUR','LILLE CEDEX','59023','FR','NORDFRPP','Etablissement de crédit',''),
+        ('41189','Banco Bilbao Vizcaya Argentaria (BBVA)','29 AVENUE DE L OPERA','PARIS 01','75001','FR','BBVAFRPP','Etablissement de crédit',''),
+        ('44729','Banco Santander SA','40 RUE DE COURCELLES','PARIS 08','75008','FR','BSCHFRPP','Etablissement de crédit',''),
+        ('18769','Bank of China limited','23 AVENUE DE LA GRANDE ARMEE','PARIS 16','75116','FR','BKCHFRPP','Etablissement de crédit',''),
+        ('11833','ICBC Europe SA','73 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','ICBKFRPP','Etablissement de crédit',''),
+        ('30438','ING Bank NV','40 AVENUE DES TERROIRS DE FRANCE','PARIS 12','75012','FR','INGBFRPP','Etablissement de crédit',''),
+        ('30628','JPMorgan Chase bank','14 PLACE VENDOME','PARIS 01','75001','FR','CHASFRPP','Etablissement de crédit',''),
+        ('25533','Goldman Sachs Bank Europe SE','5 Avenue Kleber','PARIS','75116','FR','GOLDFRPP','Etablissement de crédit',''),
+        ('30056','HSBC Continental Europe','38 AVENUE KLEBER','PARIS','75116','FR','CCFRFRPP','Etablissement de crédit',''),
+        ('30758','UBS France S.A.','69 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','UBSWFRPP','Etablissement de crédit',''),
+        ('42559','Credit cooperatif','12 BOULEVARD PESARO','NANTERRE CEDEX','92024','FR','CCOPFRPP','Etablissement de crédit',''),
+        ('30788','Banque Neuflize OBC','3 AVENUE HOCHE','PARIS 08','75008','FR','NEIOFR22','Etablissement de crédit',''),
+        ('12548','Axa banque','203-205 RUE CARNOT','FONTENAY-SOUS-BOIS CEDEX','94138','FR','AXABFRPP','Etablissement de crédit',''),
+        ('11188','RCI Banque','15 RUE D UZES','PARIS','75002','FR','RCIEFR22','Etablissement de crédit',''),
+        ('30748','Lazard Freres Banque','121 BOULEVARD HAUSSMANN','PARIS 08','75008','FR','LAZAFRPP','Etablissement de crédit',''),
     ]
     c.executemany("""INSERT OR IGNORE INTO banks
-        (code,name,address,city,postal_code,country,bic,type,notes)
-        VALUES (?,?,?,?,?,?,?,?,?)""", banks)
-    conn.commit()
-    conn.close()
-
+        (code,name,address,city,postal_code,country,bic,type,notes) VALUES (?,?,?,?,?,?,?,?,?)""", banks)
+    conn.commit(); conn.close()
 
 def seed_iban_countries():
-    """Seed IBAN country structures from BCEE document + ISO standard."""
-    conn = get_db()
-    c = conn.cursor()
+    conn = get_db(); c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM iban_countries")
-    if c.fetchone()[0] > 0:
-        conn.close()
-        return
-
+    if c.fetchone()[0] > 0: conn.close(); return
     countries = [
         ("AL","Albanie",28,"ALkk bbbs sssx cccc cccc cccc cccc","AL47212110090000000235698741","8n,16c",""),
         ("AD","Andorre",24,"ADkk bbbb ssss cccc cccc cccc","AD1200012030200359100100","4n,4n,12c",""),
-        ("AT","Autriche",20,"ATkk bbbb bccc cccc cccc","AT611904300234573201","5n,11n","AT61 1904 3002 3457 3201"),
-        ("BE","Belgique",16,"BEkk bbbc cccc ccxx","BE62510007547061","3n,7n,2n","BE62 5100 0754 7061"),
-        ("BG","Bulgarie",22,"BGkk bbbb ssss ttcc cccc cc","BG80BNBG96611020345678","4a,4n,2n,8c","BG80 BNBG 9661 1020 3456 78"),
-        ("CH","Suisse",21,"CHkk bbbb bccc cccc cccc c","CH9300762011623852977","5n,12c","CH93 0076 2011 6238 5297 7"),
-        ("CY","Chypre",28,"CYkk bbbs ssss cccc cccc cccc cccc","CY17002001280000001200527600","3n,5n,16c","CY17 0020 0128 0000 0012 0052 7600"),
-        ("CZ","Rép. Tchèque",24,"CZkk bbbb ssss sscc cccc cccc","CZ6508000000192000145399","4n,6n,10n","CZ12 AAAA 2222 2222 2222 2222"),
-        ("DE","Allemagne",22,"DEkk bbbb bbbb cccc cccc cc","DE89370400440532013000","8n,10n","DE89 3704 0044 0532 0130 00"),
-        ("DK","Danemark",18,"DKkk bbbb cccc cccc cc","DK5000400440116243","4n,9n,1n","DK50 0040 0440 1162 43"),
-        ("EE","Estonie",20,"EEkk bbss cccc cccc cccx","EE382200221020145399","2n,2n,11n,1n","EE38 2200 2210 2014 5399"),
-        ("ES","Espagne",24,"ESkk bbbb gggg xxcc cccc cccc","ES9121000418450200051332","4n,4n,1n,1n,10n","ES07 0012 0345 0300 0006 7890"),
-        ("FI","Finlande",18,"FIkk bbbb bbcc cccc cx","FI2112345600000785","6n,7n,1n","FI21 1234 5600 0007 85"),
-        ("FR","France",27,"FRkk bbbb bggg ggcc cccc cccc cxx","FR7630006000011234567890189","5n,5n,11c,2n","FR14 2004 1010 0505 0001 3M02 606"),
-        ("GB","Grande-Bretagne",22,"GBkk bbbb ssss sscc cccc cc","GB29NWBK60161331926819","4a,6n,8n","GB19 LOYD 3096 1700 7099 43"),
-        ("GR","Grèce",27,"GRkk bbbs sssc cccc cccc cccc ccc","GR1601101250000000012300695","3n,4n,16n","GR11 0172 0500 0050 5000 8582 675"),
-        ("HR","Croatie",21,"HRkk bbbb bbbc cccc cccc c","HR1210010051863000160","7n,10n","HR12 1001 0051 8630 0016 0"),
-        ("HU","Hongrie",28,"HUkk bbbs sssk cccc cccc cccc cccx","HU42117730161111101800000000","3n,4n,1n,15n,1n","HU42 1177 3016 1111 1018 0000 0000"),
-        ("IE","Irlande",22,"IEkk aaaa bbbb bbcc cccc cc","IE29AIBK93115212345678","4a,6n,8n","IE29 AIBK 931 1521 2345 678"),
-        ("IS","Islande",26,"ISkk bbbb sscc cccc iiii iiii ii","IS140159260076545510730339","4n,2n,6n,10n","IS14 0159 2600 7654 5510 7303 39"),
-        ("IT","Italie",27,"ITkk xbbb bbss sssc cccc cccc ccc","IT60X0542811101000000123456","1a,5n,5n,12c","IT40 S054 2811 1010 0000 0123 456"),
+        ("AT","Autriche",20,"ATkk bbbb bccc cccc cccc","AT611904300234573201","5n,11n",""),
+        ("BE","Belgique",16,"BEkk bbbc cccc ccxx","BE62510007547061","3n,7n,2n",""),
+        ("BG","Bulgarie",22,"BGkk bbbb ssss ttcc cccc cc","BG80BNBG96611020345678","4a,4n,2n,8c",""),
+        ("CH","Suisse",21,"CHkk bbbb bccc cccc cccc c","CH9300762011623852977","5n,12c",""),
+        ("CY","Chypre",28,"CYkk bbbs ssss cccc cccc cccc cccc","CY17002001280000001200527600","3n,5n,16c",""),
+        ("CZ","Rép. Tchèque",24,"CZkk bbbb ssss sscc cccc cccc","CZ6508000000192000145399","4n,6n,10n",""),
+        ("DE","Allemagne",22,"DEkk bbbb bbbb cccc cccc cc","DE89370400440532013000","8n,10n",""),
+        ("DK","Danemark",18,"DKkk bbbb cccc cccc cc","DK5000400440116243","4n,9n,1n",""),
+        ("EE","Estonie",20,"EEkk bbss cccc cccc cccx","EE382200221020145399","2n,2n,11n,1n",""),
+        ("ES","Espagne",24,"ESkk bbbb gggg xxcc cccc cccc","ES9121000418450200051332","4n,4n,1n,1n,10n",""),
+        ("FI","Finlande",18,"FIkk bbbb bbcc cccc cx","FI2112345600000785","6n,7n,1n",""),
+        ("FR","France",27,"FRkk bbbb bggg ggcc cccc cccc cxx","FR7630006000011234567890189","5n,5n,11c,2n",""),
+        ("GB","Grande-Bretagne",22,"GBkk bbbb ssss sscc cccc cc","GB29NWBK60161331926819","4a,6n,8n",""),
+        ("GR","Grèce",27,"GRkk bbbs sssc cccc cccc cccc ccc","GR1601101250000000012300695","3n,4n,16n",""),
+        ("HR","Croatie",21,"HRkk bbbb bbbc cccc cccc c","HR1210010051863000160","7n,10n",""),
+        ("HU","Hongrie",28,"HUkk bbbs sssk cccc cccc cccc cccx","HU42117730161111101800000000","3n,4n,1n,15n,1n",""),
+        ("IE","Irlande",22,"IEkk aaaa bbbb bbcc cccc cc","IE29AIBK93115212345678","4a,6n,8n",""),
+        ("IS","Islande",26,"ISkk bbbb sscc cccc iiii iiii ii","IS140159260076545510730339","4n,2n,6n,10n",""),
+        ("IT","Italie",27,"ITkk xbbb bbss sssc cccc cccc ccc","IT60X0542811101000000123456","1a,5n,5n,12c",""),
         ("LI","Liechtenstein",21,"LIkk bbbb bccc cccc cccc c","LI21088100002324013AA","5n,12c",""),
-        ("LT","Lituanie",20,"LTkk bbbb bccc cccc cccc","LT121000011101001000","5n,11n","LT12 1000 0111 0100 1000"),
-        ("LU","Luxembourg",20,"LUkk bbbc cccc cccc cccc","LU280019400644750000","3n,13c","LU28 0019 4006 4475 0000"),
-        ("LV","Lettonie",21,"LVkk bbbb cccc cccc cccc c","LV80BANK0000435195001","4a,13c","LV80 BANK 0000 4351 9500 1"),
+        ("LT","Lituanie",20,"LTkk bbbb bccc cccc cccc","LT121000011101001000","5n,11n",""),
+        ("LU","Luxembourg",20,"LUkk bbbc cccc cccc cccc","LU280019400644750000","3n,13c",""),
+        ("LV","Lettonie",21,"LVkk bbbb cccc cccc cccc c","LV80BANK0000435195001","4a,13c",""),
         ("MC","Monaco",27,"MCkk bbbb bggg ggcc cccc cccc cxx","MC5811222000010123456789030","5n,5n,11c,2n",""),
-        ("MT","Malte",31,"MTkk bbbb ssss sccc cccc cccc cccc ccc","MT84MALT011000012345MTLCAST001S","4a,5n,18c","MT84 MALT 0110 0001 2345 MTLC AST0 01S"),
-        ("NL","Pays-Bas",18,"NLkk bbbb cccc cccc cc","NL39RABO0300065264","4a,10n","NL39 RABO 0300 0652 64"),
-        ("NO","Norvège",15,"NOkk bbbb cccc ccx","NO9386011117947","4n,6n,1n","NO93 8601 1117 947"),
-        ("PL","Pologne",28,"PLkk bbbs sssx cccc cccc cccc cccc","PL27114020040000300201355387","8n,16n","PL27 1140 2004 0000 3002 0135 5387"),
-        ("PT","Portugal",25,"PTkk bbbb ssss cccc cccc cccx x","PT50000201231234567890154","4n,4n,11n,2n","PT50 0002 0123 1234 5678 9015 4"),
-        ("RO","Roumanie",24,"ROkk bbbb cccc cccc cccc cccc","RO49AAAA1B31007593840000","4a,16c","RO49 AAAA 1B31 0075 9384 0000"),
-        ("SE","Suède",24,"SEkk bbbc cccc cccc cccc cccc","SE3550000000054910000003","3n,16n,1n","SE35 5000 0000 0549 1000 0003"),
-        ("SI","Slovénie",19,"SIkk bbss sccc cccc cxx","SI56191000000123438","5n,8n,2n","SI56 6191 0000 0123 438"),
-        ("SK","Slovaquie",24,"SKkk bbbb ssss sscc cccc cccc","SK3112000000198742637341","4n,6n,10n","SK31 1200 0000 1987 4263 7341"),
+        ("MT","Malte",31,"MTkk bbbb ssss sccc cccc cccc cccc ccc","MT84MALT011000012345MTLCAST001S","4a,5n,18c",""),
+        ("NL","Pays-Bas",18,"NLkk bbbb cccc cccc cc","NL39RABO0300065264","4a,10n",""),
+        ("NO","Norvège",15,"NOkk bbbb cccc ccx","NO9386011117947","4n,6n,1n",""),
+        ("PL","Pologne",28,"PLkk bbbs sssx cccc cccc cccc cccc","PL27114020040000300201355387","8n,16n",""),
+        ("PT","Portugal",25,"PTkk bbbb ssss cccc cccc cccx x","PT50000201231234567890154","4n,4n,11n,2n",""),
+        ("RO","Roumanie",24,"ROkk bbbb cccc cccc cccc cccc","RO49AAAA1B31007593840000","4a,16c",""),
+        ("SE","Suède",24,"SEkk bbbc cccc cccc cccc cccc","SE3550000000054910000003","3n,16n,1n",""),
+        ("SI","Slovénie",19,"SIkk bbss sccc cccc cxx","SI56191000000123438","5n,8n,2n",""),
+        ("SK","Slovaquie",24,"SKkk bbbb ssss sscc cccc cccc","SK3112000000198742637341","4n,6n,10n",""),
         ("SM","Saint-Marin",27,"SMkk xbbb bbss sssc cccc cccc ccc","SM86U0322509800000000270100","1a,5n,5n,12c",""),
         ("TR","Turquie",26,"TRkk bbbb bxcc cccc cccc cccc cc","TR330006100519786457841326","5n,1c,16c",""),
         ("MA","Maroc",28,"MAkk bbbb bsss sscc cccc cccc cccc","","3n,3n,2n,16n",""),
@@ -610,1911 +268,1538 @@ def seed_iban_countries():
         ("DZ","Algérie",26,"DZkk bbbb bsss sscc cccc cccc cc","","5n,5n,10n,2n",""),
         ("AE","Émirats Arabes Unis",23,"AEkk bbbc cccc cccc cccc ccc","","3n,16n",""),
         ("SA","Arabie Saoudite",24,"SAkk bbcc cccc cccc cccc cccc","","2n,18c",""),
-        ("MU","Maurice",30,"MUkk bbbb bbss cccc cccc cccc cccc cc","","4a,2n,2n,12n,3n,3a",""),
     ]
     c.executemany("""INSERT OR IGNORE INTO iban_countries
-        (code,name,length,bban_format,example,structure,notes) VALUES (?,?,?,?,?,?,?)""", countries)
-    conn.commit()
-    conn.close()
+        (code,name,length,structure,example,bban_format,notes) VALUES (?,?,?,?,?,?,?)""", countries)
+    conn.commit(); conn.close()
 
-# Init DB on startup
-init_db()
-seed_banks()
-seed_iban_countries()
-
-# ══════════════════════════════════════════════════════════════════
-# DB CRUD helpers
-# ══════════════════════════════════════════════════════════════════
+# CRUD helpers
 def db_get_banks(search=""):
     conn = get_db()
     if search:
         q = f"%{search.lower()}%"
         rows = conn.execute(
             "SELECT * FROM banks WHERE lower(name) LIKE ? OR code LIKE ? OR bic LIKE ? ORDER BY name",
-            (q, q, q)).fetchall()
+            (q,q,q)).fetchall()
     else:
         rows = conn.execute("SELECT * FROM banks ORDER BY name").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    conn.close(); return [dict(r) for r in rows]
 
 def db_get_bank_by_code(code):
     conn = get_db()
-    code_clean = code.lstrip("0")
-    row = conn.execute("SELECT * FROM banks WHERE code=? OR code=?", (code, code_clean)).fetchone()
+    row = conn.execute("SELECT * FROM banks WHERE code=? OR code=?",
+                       (code, code.lstrip("0"))).fetchone()
     if not row:
-        # Try prefix match
-        row = conn.execute("SELECT * FROM banks WHERE code LIKE ? LIMIT 1", (code[:4]+"%",)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+        row = conn.execute("SELECT * FROM banks WHERE code LIKE ? LIMIT 1",
+                           (code[:4]+"%",)).fetchone()
+    conn.close(); return dict(row) if row else None
 
 def db_upsert_bank(code, name, address, city, postal_code, country, bic, btype, notes):
     conn = get_db()
     conn.execute("""INSERT INTO banks (code,name,address,city,postal_code,country,bic,type,notes,updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-        ON CONFLICT(code) DO UPDATE SET
-        name=excluded.name, address=excluded.address, city=excluded.city,
-        postal_code=excluded.postal_code, country=excluded.country, bic=excluded.bic,
-        type=excluded.type, notes=excluded.notes, updated_at=CURRENT_TIMESTAMP""",
-        (code, name, address, city, postal_code, country, bic, btype, notes))
-    conn.commit()
-    conn.close()
+        ON CONFLICT(code) DO UPDATE SET name=excluded.name,address=excluded.address,
+        city=excluded.city,postal_code=excluded.postal_code,country=excluded.country,
+        bic=excluded.bic,type=excluded.type,notes=excluded.notes,updated_at=CURRENT_TIMESTAMP""",
+        (code,name,address,city,postal_code,country,bic,btype,notes))
+    conn.commit(); conn.close()
 
 def db_delete_bank(code):
     conn = get_db()
     conn.execute("DELETE FROM banks WHERE code=?", (code,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
 
 def db_get_iban_country(code):
     conn = get_db()
     row = conn.execute("SELECT * FROM iban_countries WHERE code=?", (code.upper(),)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+    conn.close(); return dict(row) if row else None
 
 def db_get_all_iban_countries():
     conn = get_db()
     rows = conn.execute("SELECT * FROM iban_countries ORDER BY name").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    conn.close(); return [dict(r) for r in rows]
 
 def db_upsert_iban_country(code, name, length, bban_format, example, structure, notes):
     conn = get_db()
     conn.execute("""INSERT INTO iban_countries (code,name,length,bban_format,example,structure,notes)
         VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT(code) DO UPDATE SET
-        name=excluded.name, length=excluded.length, bban_format=excluded.bban_format,
-        example=excluded.example, structure=excluded.structure, notes=excluded.notes""",
-        (code.upper(), name, length, bban_format, example, structure, notes))
-    conn.commit()
-    conn.close()
+        ON CONFLICT(code) DO UPDATE SET name=excluded.name,length=excluded.length,
+        bban_format=excluded.bban_format,example=excluded.example,
+        structure=excluded.structure,notes=excluded.notes""",
+        (code.upper(),name,length,bban_format,example,structure,notes))
+    conn.commit(); conn.close()
 
 def db_save_report(entity, entity_type, iban, score, niveau, reco, resume, full_json):
     conn = get_db()
     conn.execute("""INSERT INTO osint_reports
         (entity,entity_type,iban,score,niveau,recommandation,resume,full_json)
         VALUES (?,?,?,?,?,?,?,?)""",
-        (entity, entity_type, iban, score, niveau, reco, resume, full_json))
-    conn.commit()
-    conn.close()
+        (entity,entity_type,iban,score,niveau,reco,resume,full_json))
+    conn.commit(); conn.close()
 
-def db_get_reports(limit=50):
+def db_get_reports(limit=100):
     conn = get_db()
     rows = conn.execute("SELECT * FROM osint_reports ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    conn.close(); return [dict(r) for r in rows]
 
 def db_get_watchlist():
     conn = get_db()
     rows = conn.execute("SELECT * FROM watchlist ORDER BY created_at DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    conn.close(); return [dict(r) for r in rows]
 
 def db_add_watchlist(entity, entity_type, reason, risk_level, added_by):
     conn = get_db()
     conn.execute("INSERT INTO watchlist (entity,entity_type,reason,risk_level,added_by) VALUES (?,?,?,?,?)",
-                 (entity, entity_type, reason, risk_level, added_by))
-    conn.commit()
-    conn.close()
+                 (entity,entity_type,reason,risk_level,added_by))
+    conn.commit(); conn.close()
 
 def db_delete_watchlist(wid):
     conn = get_db()
     conn.execute("DELETE FROM watchlist WHERE id=?", (wid,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
 
-# ══════════════════════════════════════════════════════════════════
-# IBAN VALIDATION
-# ══════════════════════════════════════════════════════════════════
+# Initialise DB on startup
+init_db(); seed_banks(); seed_iban_countries()
+
+
+# ─────────────────────────────────────────────────────────────────
+# § 3  IBAN VALIDATION
+# ─────────────────────────────────────────────────────────────────
+
 def validate_iban(iban_raw: str) -> dict:
-    iban = iban_raw.replace(" ", "").replace("-", "").upper()
-    result = {
-        "raw": iban, "formatted": " ".join(iban[i:i+4] for i in range(0, len(iban), 4)),
-        "valid": False, "country": "", "bank_code": "",
-        "branch_code": "", "account_no": "", "rib_key": "", "message": ""
-    }
-    if len(iban) < 5:
-        result["message"] = "IBAN trop court"
-        return result
-
-    country = iban[:2]
-    result["country"] = country
-
-    # Check country exists
+    iban = iban_raw.replace(" ","").replace("-","").upper()
+    res = {"raw":iban,"formatted":" ".join(iban[i:i+4] for i in range(0,len(iban),4)),
+           "valid":False,"country":"","bank_code":"","branch_code":"",
+           "account_no":"","rib_key":"","message":""}
+    if len(iban) < 5: res["message"] = "IBAN trop court"; return res
+    country = iban[:2]; res["country"] = country
     country_info = db_get_iban_country(country)
-    if country_info:
-        expected_len = country_info["length"]
-        if len(iban) != expected_len:
-            result["message"] = f"Longueur incorrecte : {len(iban)} chars (attendu {expected_len} pour {country_info['name']})"
-            return result
-
-    # Mod-97 check
+    if country_info and len(iban) != country_info["length"]:
+        res["message"] = (f"Longueur incorrecte : {len(iban)} chars "
+                          f"(attendu {country_info['length']} pour {country_info['name']})")
+        return res
     rearranged = iban[4:] + iban[:4]
     numeric = ""
     for ch in rearranged:
-        if ch.isdigit():
-            numeric += ch
-        elif ch.isalpha():
-            numeric += str(ord(ch) - 55)
-        else:
-            result["message"] = f"Caractère invalide : '{ch}'"
-            return result
-
+        if ch.isdigit(): numeric += ch
+        elif ch.isalpha(): numeric += str(ord(ch)-55)
+        else: res["message"] = f"Caractère invalide : '{ch}'"; return res
     if int(numeric) % 97 != 1:
-        result["message"] = "❌ Clé de contrôle invalide (mod97 échoué)"
-        return result
+        res["message"] = "❌ Clé de contrôle invalide (mod97 échoué)"; return res
+    res["valid"] = True; res["message"] = "✅ IBAN valide"
+    if country in ("FR","MC") and len(iban) == 27:
+        res["bank_code"]=iban[4:9]; res["branch_code"]=iban[9:14]
+        res["account_no"]=iban[14:25]; res["rib_key"]=iban[25:27]
+    elif country == "DE" and len(iban) == 22: res["bank_code"]=iban[4:12]
+    elif country == "GB" and len(iban) == 22: res["bank_code"]=iban[4:8]
+    elif country == "NL" and len(iban) == 18: res["bank_code"]=iban[4:8]
+    elif country == "ES" and len(iban) == 24: res["bank_code"]=iban[4:8]
+    elif country == "IT" and len(iban) == 27: res["bank_code"]=iban[5:10]
+    elif country == "CH" and len(iban) == 21: res["bank_code"]=iban[4:9]
+    elif country == "BE" and len(iban) == 16: res["bank_code"]=iban[4:7]
+    elif country == "LU" and len(iban) == 20: res["bank_code"]=iban[4:7]
+    else: res["bank_code"]=iban[4:8]
+    return res
 
-    result["valid"] = True
-    result["message"] = "✅ IBAN valide"
 
-    # Extract fields for FR (27) and MC (27)
-    if country in ("FR", "MC") and len(iban) == 27:
-        result["bank_code"]   = iban[4:9]
-        result["branch_code"] = iban[9:14]
-        result["account_no"]  = iban[14:25]
-        result["rib_key"]     = iban[25:27]
-    elif country == "LU" and len(iban) == 20:
-        result["bank_code"] = iban[4:7]
-    elif country == "BE" and len(iban) == 16:
-        result["bank_code"] = iban[4:7]
-    elif country == "DE" and len(iban) == 22:
-        result["bank_code"] = iban[4:12]
-    elif country == "GB" and len(iban) == 22:
-        result["bank_code"] = iban[4:8]   # BIC prefix (4 chars)
-    elif country == "NL" and len(iban) == 18:
-        result["bank_code"] = iban[4:8]
-    elif country == "ES" and len(iban) == 24:
-        result["bank_code"] = iban[4:8]
-    elif country == "IT" and len(iban) == 27:
-        result["bank_code"] = iban[5:10]
-    elif country == "CH" and len(iban) == 21:
-        result["bank_code"] = iban[4:9]
-    else:
-        # Generic: take first 4-8 chars after check digits as bank code
-        result["bank_code"] = iban[4:8]
+# ─────────────────────────────────────────────────────────────────
+# § 4  OSINT ENGINE
+# ─────────────────────────────────────────────────────────────────
 
-    return result
+# ── 4a. Query catalogue ───────────────────────────────────────────
+# Each entry: (query_template, category, gravity, label)
+# {e} is replaced with the entity name at runtime
+QUERY_CATALOGUE = [
+    # ── Financial crime — FR ──────────────────────────────────────
+    ('"{e}" fraude escroquerie arnaque',            "fraud",     "eleve",  "Fraude/Arnaque FR"),
+    ('"{e}" corruption pot-de-vin détournement',    "fraud",     "eleve",  "Corruption FR"),
+    ('"{e}" blanchiment financement terrorisme',    "sanctions", "eleve",  "Blanchiment FR"),
+    ('"{e}" condamné tribunal jugement pénal',      "judicial",  "eleve",  "Condamnation FR"),
+    ('"{e}" mis en examen inculpé perquisition',    "judicial",  "moyen",  "Procédure pénale FR"),
+    ('"{e}" liquidation judiciaire faillite',       "judicial",  "moyen",  "Faillite FR"),
+    ('"{e}" sanction AMF ACPR interdiction',        "sanctions", "eleve",  "Sanction régulateur FR"),
+    ('"{e}" liste noire blacklist OFAC',            "sanctions", "eleve",  "Liste sanctions FR"),
+    ('"{e}" plainte victime signalement arnaque',   "reputation","moyen",  "Signalement FR"),
+    ('"{e}" abus de biens sociaux malversation',    "fraud",     "eleve",  "ABS FR"),
+    ('"{e}" fraude fiscale redressement fiscal',    "fraud",     "eleve",  "Fraude fiscale FR"),
+    ('"{e}" faux usage de faux falsification',      "fraud",     "moyen",  "Faux FR"),
+    ('"{e}" interdit bancaire fichier Banque de France', "judicial","moyen","Interdit bancaire FR"),
+    # ── Financial crime — EN ──────────────────────────────────────
+    ('"{e}" fraud scam money laundering',           "fraud",     "eleve",  "Fraud EN"),
+    ('"{e}" corruption bribery convicted',          "fraud",     "eleve",  "Corruption EN"),
+    ('"{e}" sanctions blacklist OFAC banned',       "sanctions", "eleve",  "Sanctions EN"),
+    ('"{e}" criminal charges lawsuit arrested',     "judicial",  "eleve",  "Criminal EN"),
+    ('"{e}" Ponzi embezzlement misappropriation',   "fraud",     "eleve",  "Embezzlement EN"),
+    ('"{e}" regulatory penalty enforcement action', "sanctions", "eleve",  "Regulatory EN"),
+    ('"{e}" indicted convicted sentenced prison',   "judicial",  "eleve",  "Sentenced EN"),
+    ('"{e}" bankruptcy insolvency default',         "judicial",  "moyen",  "Bankruptcy EN"),
+    ('"{e}" scandal controversy warning consumer',  "reputation","moyen",  "Scandal EN"),
+    ('"{e}" tax evasion insider trading',           "fraud",     "eleve",  "Tax evasion EN"),
+    ('"{e}" terrorist financing links',             "sanctions", "eleve",  "Terror financing EN"),
+    # ── Other languages ───────────────────────────────────────────
+    ('"{e}" fraude estafa corrupción condenado',    "fraud",     "eleve",  "Fraude ES"),
+    ('"{e}" blanqueo dinero sanción investigado',   "sanctions", "eleve",  "Sanciones ES"),
+    ('"{e}" Betrug Korruption verurteilt',          "fraud",     "eleve",  "Betrug DE"),
+    ('"{e}" Geldwäsche Sanktion Ermittlung',        "sanctions", "eleve",  "Sanktionen DE"),
+    ('"{e}" truffa corruzione condannato',          "fraud",     "eleve",  "Truffa IT"),
+    ('"{e}" احتيال غسيل أموال فساد',              "fraud",     "eleve",  "Fraude AR"),
+    ('"{e}" мошенничество коррупция арест',         "fraud",     "eleve",  "Мошенничество RU"),
+    ('"{e}" 欺诈 洗钱 腐败',                        "fraud",     "eleve",  "诈骗 ZH"),
+    # ── Official sources ──────────────────────────────────────────
+    ('site:opensanctions.org "{e}"',                "sanctions", "eleve",  "OpenSanctions"),
+    ('site:ofac.treas.gov "{e}"',                   "sanctions", "eleve",  "OFAC USA"),
+    ('site:amf-france.org "{e}"',                   "sanctions", "eleve",  "AMF France"),
+    ('site:acpr.banque-france.fr "{e}"',            "sanctions", "eleve",  "ACPR"),
+    ('site:sec.gov "{e}"',                          "sanctions", "eleve",  "SEC USA"),
+    ('site:legifrance.gouv.fr "{e}"',               "judicial",  "eleve",  "Legifrance"),
+    ('site:bodacc.fr "{e}"',                        "judicial",  "moyen",  "BODACC"),
+    ('site:infogreffe.fr "{e}"',                    "judicial",  "faible", "Infogreffe"),
+    ('site:pappers.fr "{e}"',                       "judicial",  "faible", "Pappers"),
+    ('site:societe.com "{e}"',                      "judicial",  "faible", "Societe.com"),
+    ('site:companieshouse.gov.uk "{e}"',            "judicial",  "faible", "Companies House UK"),
+    ('site:opencorporates.com "{e}"',               "judicial",  "faible", "OpenCorporates"),
+    ('"{e}" EU UN OFAC SDN sanctioned',             "sanctions", "eleve",  "SDN sanctions"),
+    ('"{e}" Interpol red notice wanted',            "sanctions", "eleve",  "Interpol"),
+    ('"{e}" PEP politically exposed person',        "sanctions", "moyen",  "PEP"),
+    # ── Scam / review sites ───────────────────────────────────────
+    ('site:signal-arnaques.com "{e}"',              "reputation","eleve",  "Signal-arnaques"),
+    ('site:cybermalveillance.gouv.fr "{e}"',        "reputation","eleve",  "Cybermalveillance"),
+    ('site:trustpilot.com "{e}"',                   "reputation","faible", "Trustpilot"),
+    ('"{e}" victime arnaque forum témoignage',      "reputation","moyen",  "Témoignages FR"),
+    ('"{e}" scam reported victim forum',            "reputation","moyen",  "Scam reports EN"),
+    # ── Social media ──────────────────────────────────────────────
+    ('site:twitter.com "{e}" arnaque scam fraud',  "reputation","faible", "Twitter"),
+    ('site:reddit.com "{e}" scam fraud arnaque',   "reputation","faible", "Reddit"),
+    ('site:facebook.com "{e}" arnaque fraude',     "reputation","faible", "Facebook"),
+    # ── Press (world) ─────────────────────────────────────────────
+    ('site:lemonde.fr "{e}"',                       "reputation","moyen",  "Le Monde"),
+    ('site:lefigaro.fr "{e}"',                      "reputation","moyen",  "Le Figaro"),
+    ('site:bfmtv.com "{e}"',                        "reputation","moyen",  "BFM TV"),
+    ('site:lesechos.fr "{e}"',                      "reputation","moyen",  "Les Echos"),
+    ('site:reuters.com "{e}"',                      "reputation","moyen",  "Reuters"),
+    ('site:bloomberg.com "{e}"',                    "reputation","moyen",  "Bloomberg"),
+    ('site:theguardian.com "{e}"',                  "reputation","moyen",  "The Guardian"),
+    ('site:bbc.com "{e}"',                          "reputation","moyen",  "BBC"),
+]
 
-# ══════════════════════════════════════════════════════════════════
-# WEB / OSINT FUNCTIONS
-# ══════════════════════════════════════════════════════════════════
-def check_opensanctions(name: str) -> dict:
-    try:
-        r = requests.get(
-            f"https://api.opensanctions.org/search/default?q={quote_plus(name)}&limit=5",
-            timeout=8)
-        if r.status_code == 200:
-            d = r.json()
-            return {"found": d.get("total", 0) > 0, "count": d.get("total", 0),
-                    "results": d.get("results", [])[:5]}
-    except:
-        pass
-    return {"found": False, "count": 0, "results": [], "error": "Non disponible"}
+# ── Negative keywords used to identify relevant snippets ──────────
+NEGATIVE_KEYWORDS = [
+    "fraude","fraud","arnaque","scam","escroquerie","corruption","condamné",
+    "convicted","sanctionné","sanctioned","blanchiment","laundering","faillite",
+    "bankruptcy","tribunal","lawsuit","arresté","arrested","blacklist","liste noire",
+    "détournement","embezzlement","plainte","complaint","victime","victim",
+    "jugement","sentenced","peine","prison","inculpé","indicted","perquisition",
+    "санкции","мошенничество","احتيال","عقوبات","欺诈","制裁","estafa","corrupción",
+    "sanction","interdiction","liquidation","redressement","interdit",
+    "poursuivi","poursuites","mis en cause","mis en examen","garde à vue",
+    "détournement","abus de biens","malversation","usurpation",
+    "signal-arnaques","cybermalveillance","escroc","arnaqueur","suspicious",
+]
 
-def search_web(query: str, num: int = 8) -> list:
-    """DuckDuckGo primary, Bing fallback."""
+# ── 4b. Web search ────────────────────────────────────────────────
+
+def search_web(query: str, num: int = 5) -> list:
+    """DuckDuckGo HTML search with Bing fallback."""
     from bs4 import BeautifulSoup
-    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
     results = []
     try:
         r = requests.get(f"https://html.duckduckgo.com/html/?q={quote_plus(query)}",
-                         headers={"User-Agent": ua}, timeout=12)
+                         headers={"User-Agent":ua}, timeout=12)
         soup = BeautifulSoup(r.text, "html.parser")
         for item in soup.select(".result")[:num]:
             a    = item.find("a", class_="result__a")
             snip = item.find("a", class_="result__snippet")
-            if a and a.get("href","").startswith("http"):
-                results.append({
-                    "title":   a.get_text(strip=True),
-                    "url":     a.get("href",""),
-                    "snippet": snip.get_text(strip=True) if snip else "",
-                })
+            if a and str(a.get("href","")).startswith("http"):
+                results.append({"title":a.get_text(strip=True),
+                                 "url":a.get("href",""),
+                                 "snippet":snip.get_text(strip=True) if snip else ""})
     except: pass
     if len(results) < 2:
         try:
             r = requests.get(f"https://www.bing.com/search?q={quote_plus(query)}&count={num}",
-                              headers={"User-Agent": ua}, timeout=12)
+                              headers={"User-Agent":ua}, timeout=12)
             soup = BeautifulSoup(r.text, "html.parser")
             for li in soup.select("li.b_algo")[:num]:
-                h2 = li.find("h2")
-                a  = h2.find("a") if h2 else None
-                p  = li.find("p")
-                if a and a.get("href","").startswith("http"):
-                    results.append({
-                        "title":   a.get_text(strip=True),
-                        "url":     a.get("href",""),
-                        "snippet": p.get_text(strip=True) if p else "",
-                    })
+                h2=li.find("h2"); a=h2.find("a") if h2 else None; p=li.find("p")
+                if a and str(a.get("href","")).startswith("http"):
+                    results.append({"title":a.get_text(strip=True),
+                                    "url":a.get("href",""),
+                                    "snippet":p.get_text(strip=True) if p else ""})
         except: pass
     return results[:num]
 
 
-# ── Catégories de requêtes : chaque query est DÉJÀ un signal négatif ciblé ──
-# Quand DuckDuckGo retourne un résultat pour "Jean Dupont fraude",
-# ce résultat EST une alerte, qu il contienne ou non le mot "fraude" dans le snippet.
-QUERY_CATEGORIES = {
-    # (label_categorie, gravite_defaut, nature)
-    "fraude arnaque escroquerie":          ("fraud",     "eleve",  "Fraude / Arnaque"),
-    "scandale corruption pot-de-vin":      ("fraud",     "eleve",  "Corruption"),
-    "blanchiment financement terrorisme":  ("sanctions", "eleve",  "Blanchiment / Terrorisme"),
-    "condamné tribunal jugement":          ("judicial",  "eleve",  "Condamnation judiciaire"),
-    "mis en examen perquisition":          ("judicial",  "moyen",  "Procédure pénale"),
-    "liquidation judiciaire faillite":     ("judicial",  "moyen",  "Faillite / Liquidation"),
-    "sanction AMF ACPR interdiction":      ("sanctions", "eleve",  "Sanction régulateur"),
-    "liste noire blacklist OFAC":          ("sanctions", "eleve",  "Liste de sanctions"),
-    "plainte victime signalement":         ("reputation","moyen",  "Plainte / Signalement"),
-    "arnaqueur escroc déconseillé":        ("reputation","moyen",  "Réputation négative"),
-    "fraud scam money laundering":         ("fraud",     "eleve",  "Fraude (EN)"),
-    "corruption bribery convicted":        ("fraud",     "eleve",  "Corruption (EN)"),
-    "sanctions blacklist OFAC banned":     ("sanctions", "eleve",  "Sanctions (EN)"),
-    "criminal charges lawsuit arrested":   ("judicial",  "eleve",  "Procédure judiciaire (EN)"),
-    "scandal controversy warning alert":   ("reputation","moyen",  "Signalement (EN)"),
-    "احتيال غسيل أموال فساد":              ("fraud",     "eleve",  "Fraude (AR)"),
-    "عقوبات قائمة سوداء":                  ("sanctions", "eleve",  "Sanctions (AR)"),
-    "мошенничество коррупция арест":       ("fraud",     "eleve",  "Fraude (RU)"),
-    "санкции чёрный список":               ("sanctions", "eleve",  "Sanctions (RU)"),
-    "fraude estafa corrupción":            ("fraud",     "eleve",  "Fraude (ES)"),
-    "欺诈 洗钱 腐败":                       ("fraud",     "eleve",  "Fraude (ZH)"),
-    "trustpilot":                          ("reputation","faible", "Avis Trustpilot"),
-    "signal-arnaques":                     ("reputation","eleve",  "Signal arnaque"),
-    "opensanctions.org":                   ("sanctions", "eleve",  "OpenSanctions"),
-    "amf-france.org":                      ("sanctions", "eleve",  "AMF France"),
-    "acpr.banque-france.fr":               ("sanctions", "eleve",  "ACPR"),
-    "bodacc.fr":                           ("judicial",  "moyen",  "BODACC"),
-    "infogreffe.fr":                       ("judicial",  "faible", "Infogreffe"),
-    "sec.gov":                             ("sanctions", "eleve",  "SEC USA"),
-    "ofac.treas.gov":                      ("sanctions", "eleve",  "OFAC USA"),
-    "twitter.com":                         ("reputation","faible", "Réseau social Twitter"),
-    "linkedin.com":                        ("reputation","faible", "LinkedIn"),
-    "reddit.com":                          ("reputation","faible", "Reddit"),
-    "facebook.com":                        ("reputation","faible", "Facebook"),
-}
+def check_opensanctions(name: str) -> dict:
+    try:
+        r = requests.get(f"https://api.opensanctions.org/search/default?q={quote_plus(name)}&limit=5",
+                         timeout=8)
+        if r.status_code == 200:
+            d = r.json()
+            return {"found":d.get("total",0)>0,"count":d.get("total",0),
+                    "results":d.get("results",[])[:5]}
+    except: pass
+    return {"found":False,"count":0,"results":[],"error":"Non disponible"}
 
 
-def build_search_queries(entity: str) -> list:
-    """
-    Construit les requêtes. Chaque requête retourne des résultats
-    qui SONT des alertes potentielles (la requête était déjà négative).
-    Retourne une liste de (query_string, categorie_key).
-    """
-    e = entity
-    queries = []  # list of (query, cat_key)
-
-    # ── FR ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" fraude arnaque escroquerie',          "fraude arnaque escroquerie"),
-        (f'"{e}" scandale corruption pot-de-vin',      "scandale corruption pot-de-vin"),
-        (f'"{e}" blanchiment financement terrorisme',  "blanchiment financement terrorisme"),
-        (f'"{e}" condamné tribunal jugement pénal',    "condamné tribunal jugement"),
-        (f'"{e}" mis en examen perquisition',          "mis en examen perquisition"),
-        (f'"{e}" liquidation judiciaire faillite',     "liquidation judiciaire faillite"),
-        (f'"{e}" sanction AMF ACPR interdiction',      "sanction AMF ACPR interdiction"),
-        (f'"{e}" liste noire blacklist OFAC',          "liste noire blacklist OFAC"),
-        (f'"{e}" plainte victime signalement',         "plainte victime signalement"),
-        (f'"{e}" arnaqueur escroc déconseillé',        "arnaqueur escroc déconseillé"),
-        (f'"{e}" mis en cause procès pénal',           "condamné tribunal jugement"),
-        (f'"{e}" interdit bancaire liste noire',       "liste noire blacklist OFAC"),
-        (f'"{e}" détournement malversation abus',      "scandale corruption pot-de-vin"),
-        (f'"{e}" faux usage falsification',            "fraude arnaque escroquerie"),
-    ]
-    # ── EN ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" fraud scam money laundering',         "fraud scam money laundering"),
-        (f'"{e}" corruption bribery convicted',        "corruption bribery convicted"),
-        (f'"{e}" sanctions blacklist OFAC banned',     "sanctions blacklist OFAC banned"),
-        (f'"{e}" criminal charges lawsuit arrested',   "criminal charges lawsuit arrested"),
-        (f'"{e}" scandal controversy warning alert',   "scandal controversy warning alert"),
-        (f'"{e}" Ponzi embezzlement misappropriation', "fraud scam money laundering"),
-        (f'"{e}" regulatory penalty enforcement',      "sanction AMF ACPR interdiction"),
-        (f'"{e}" terrorist financing links',           "blanchiment financement terrorisme"),
-        (f'"{e}" indicted convicted sentenced prison', "condamné tribunal jugement"),
-        (f'"{e}" bankruptcy insolvency default',       "liquidation judiciaire faillite"),
-        (f'"{e}" fired dismissed misconduct',          "scandal controversy warning alert"),
-        (f'"{e}" tax evasion insider trading',         "fraud scam money laundering"),
-    ]
-    # ── ES ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" fraude estafa corrupción condenado',  "fraude estafa corrupción"),
-        (f'"{e}" blanqueo dinero sanción investigado', "fraude estafa corrupción"),
-        (f'"{e}" escándalo denuncia víctima',          "fraude estafa corrupción"),
-    ]
-    # ── PT ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" fraude golpe corrupção condenado',    "fraude estafa corrupción"),
-        (f'"{e}" lavagem dinheiro sanção',             "sanctions blacklist OFAC banned"),
-    ]
-    # ── DE ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" Betrug Korruption verurteilt',        "fraud scam money laundering"),
-        (f'"{e}" Geldwäsche Sanktion Ermittlung',      "sanctions blacklist OFAC banned"),
-    ]
-    # ── IT ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" truffa corruzione condannato',        "fraud scam money laundering"),
-        (f'"{e}" riciclaggio sanzione indagato',       "sanctions blacklist OFAC banned"),
-    ]
-    # ── AR ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" احتيال غسيل أموال فساد',             "احتيال غسيل أموال فساد"),
-        (f'"{e}" عقوبات قائمة سوداء اعتقال',          "عقوبات قائمة سوداء"),
-    ]
-    # ── RU ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" мошенничество коррупция арест',       "мошенничество коррупция арест"),
-        (f'"{e}" санкции чёрный список',               "санкции чёрный список"),
-    ]
-    # ── ZH ────────────────────────────────────────────────────────
-    queries += [
-        (f'"{e}" 欺诈 洗钱 腐败 逮捕',                 "欺诈 洗钱 腐败"),
-        (f'"{e}" 制裁 黑名单',                         "sanctions blacklist OFAC banned"),
-    ]
-    # ── RÉSEAUX SOCIAUX ───────────────────────────────────────────
-    queries += [
-        (f'site:twitter.com "{e}"',                    "twitter.com"),
-        (f'site:twitter.com "{e}" arnaque scam fraud', "twitter.com"),
-        (f'site:linkedin.com "{e}"',                   "linkedin.com"),
-        (f'site:facebook.com "{e}" arnaque fraude',    "facebook.com"),
-        (f'site:reddit.com "{e}" scam fraud arnaque',  "reddit.com"),
-        (f'site:instagram.com "{e}"',                  "reputation"),
-        (f'site:youtube.com "{e}" arnaque fraud',      "reputation"),
-    ]
-    # ── AVIS / ARNAQUES ───────────────────────────────────────────
-    queries += [
-        (f'site:trustpilot.com "{e}"',                 "trustpilot"),
-        (f'site:avis-verifies.com "{e}"',              "trustpilot"),
-        (f'site:glassdoor.com "{e}"',                  "trustpilot"),
-        (f'site:signal-arnaques.com "{e}"',            "signal-arnaques"),
-        (f'site:cybermalveillance.gouv.fr "{e}"',      "signal-arnaques"),
-        (f'"{e}" victime arnaque forum témoignage',    "plainte victime signalement"),
-        (f'"{e}" scam reported victim forum',          "plainte victime signalement"),
-    ]
-    # ── REGISTRES LÉGAUX ──────────────────────────────────────────
-    queries += [
-        (f'site:bodacc.fr "{e}"',                      "bodacc.fr"),
-        (f'site:infogreffe.fr "{e}"',                  "infogreffe.fr"),
-        (f'site:pappers.fr "{e}"',                     "infogreffe.fr"),
-        (f'site:societe.com "{e}"',                    "infogreffe.fr"),
-        (f'site:legifrance.gouv.fr "{e}"',             "condamné tribunal jugement"),
-        (f'site:justice.fr "{e}"',                     "condamné tribunal jugement"),
-        (f'site:courdecassation.fr "{e}"',             "condamné tribunal jugement"),
-        (f'site:companieshouse.gov.uk "{e}"',          "infogreffe.fr"),
-        (f'site:opencorporates.com "{e}"',             "infogreffe.fr"),
-        (f'site:sec.gov "{e}"',                        "sec.gov"),
-        (f'site:pacer.gov "{e}"',                      "condamné tribunal jugement"),
-    ]
-    # ── SANCTIONS ─────────────────────────────────────────────────
-    queries += [
-        (f'site:opensanctions.org "{e}"',              "opensanctions.org"),
-        (f'site:ofac.treas.gov "{e}"',                 "ofac.treas.gov"),
-        (f'site:sanctionsmap.eu "{e}"',                "sanctions blacklist OFAC banned"),
-        (f'site:amf-france.org "{e}"',                 "amf-france.org"),
-        (f'site:acpr.banque-france.fr "{e}"',          "acpr.banque-france.fr"),
-        (f'"{e}" EU UN OFAC SDN sanctioned',           "sanctions blacklist OFAC banned"),
-        (f'"{e}" Interpol red notice wanted',          "sanctions blacklist OFAC banned"),
-        (f'"{e}" PEP politically exposed',             "sanctions blacklist OFAC banned"),
-    ]
-    # ── PRESSE MONDIALE ───────────────────────────────────────────
-    queries += [
-        (f'site:lemonde.fr "{e}"',                     "scandal controversy warning alert"),
-        (f'site:lefigaro.fr "{e}"',                    "scandal controversy warning alert"),
-        (f'site:bfmtv.com "{e}"',                      "scandal controversy warning alert"),
-        (f'site:lesechos.fr "{e}"',                    "scandal controversy warning alert"),
-        (f'site:reuters.com "{e}"',                    "scandal controversy warning alert"),
-        (f'site:bloomberg.com "{e}"',                  "scandal controversy warning alert"),
-        (f'site:bbc.com "{e}"',                        "scandal controversy warning alert"),
-        (f'site:aljazeera.com "{e}"',                  "scandal controversy warning alert"),
-        (f'site:theguardian.com "{e}"',                "scandal controversy warning alert"),
-    ]
-
-    return queries
-
-
-def scrape_page(url: str, max_chars=4000) -> str:
+def scrape_page(url: str, max_chars=3000) -> str:
     try:
         from bs4 import BeautifulSoup
         ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        r = requests.get(url, headers={"User-Agent": ua}, timeout=10, allow_redirects=True)
+        r = requests.get(url, headers={"User-Agent":ua}, timeout=10, allow_redirects=True)
         soup = BeautifulSoup(r.text, "html.parser")
         for tag in soup(["script","style","nav","footer","header","aside","iframe"]):
             tag.decompose()
         return soup.get_text(" ", strip=True)[:max_chars]
-    except:
-        return ""
+    except: return ""
 
 
-SOURCE_CREDIBILITY = {
-    "lemonde.fr":1.5,"lefigaro.fr":1.5,"liberation.fr":1.3,"bfmtv.com":1.3,
-    "franceinfo.fr":1.4,"latribune.fr":1.4,"lesechos.fr":1.5,"capital.fr":1.3,
-    "leparisien.fr":1.3,"challenges.fr":1.3,
-    "reuters.com":1.6,"bloomberg.com":1.6,"ft.com":1.6,"wsj.com":1.5,
-    "theguardian.com":1.5,"nytimes.com":1.5,"bbc.com":1.4,
-    "spiegel.de":1.4,"elpais.com":1.4,"aljazeera.com":1.3,
-    "opensanctions.org":2.0,"legifrance.gouv.fr":2.0,"justice.fr":2.0,
-    "bodacc.fr":1.8,"infogreffe.fr":1.8,"amf-france.org":2.0,
-    "acpr.banque-france.fr":2.0,"interpol.int":2.0,"europol.europa.eu":2.0,
-    "tracfin.gouv.fr":2.0,"courdecassation.fr":1.9,"sec.gov":2.0,
-    "ofac.treas.gov":2.0,"pacer.gov":1.8,"companieshouse.gov.uk":1.7,
-    "opencorporates.com":1.5,"pappers.fr":1.6,"societe.com":1.4,
-    "trustpilot.com":1.2,"avis-verifies.com":1.1,"glassdoor.com":1.1,
-    "signal-arnaques.com":1.5,"cybermalveillance.gouv.fr":1.8,
-    "twitter.com":0.9,"linkedin.com":1.0,"reddit.com":0.9,
-    "facebook.com":0.8,"instagram.com":0.8,"youtube.com":0.8,
-}
+# ── 4c. Analysis engine ───────────────────────────────────────────
 
-# Gravité par catégorie query
-QUERY_CAT_INFO = {
-    "fraude arnaque escroquerie":         ("fraud",     "eleve",  "Fraude / Arnaque"),
-    "scandale corruption pot-de-vin":     ("fraud",     "eleve",  "Corruption"),
-    "blanchiment financement terrorisme": ("sanctions", "eleve",  "Blanchiment / Terrorisme"),
-    "condamné tribunal jugement":         ("judicial",  "eleve",  "Condamnation judiciaire"),
-    "mis en examen perquisition":         ("judicial",  "moyen",  "Procédure pénale"),
-    "liquidation judiciaire faillite":    ("judicial",  "moyen",  "Faillite / Liquidation"),
-    "sanction AMF ACPR interdiction":     ("sanctions", "eleve",  "Sanction régulateur FR"),
-    "liste noire blacklist OFAC":         ("sanctions", "eleve",  "Liste de sanctions"),
-    "plainte victime signalement":        ("reputation","moyen",  "Plainte / Signalement"),
-    "arnaqueur escroc déconseillé":       ("reputation","moyen",  "Réputation négative"),
-    "fraud scam money laundering":        ("fraud",     "eleve",  "Fraude (EN)"),
-    "corruption bribery convicted":       ("fraud",     "eleve",  "Corruption (EN)"),
-    "sanctions blacklist OFAC banned":    ("sanctions", "eleve",  "Sanctions (EN)"),
-    "criminal charges lawsuit arrested":  ("judicial",  "eleve",  "Procédure judiciaire (EN)"),
-    "scandal controversy warning alert":  ("reputation","moyen",  "Presse / Médias"),
-    "fraude estafa corrupción":           ("fraud",     "eleve",  "Fraude (ES/PT)"),
-    "احتيال غسيل أموال فساد":            ("fraud",     "eleve",  "Fraude (AR)"),
-    "عقوبات قائمة سوداء":                ("sanctions", "eleve",  "Sanctions (AR)"),
-    "мошенничество коррупция арест":      ("fraud",     "eleve",  "Fraude (RU)"),
-    "санкции чёрный список":              ("sanctions", "eleve",  "Sanctions (RU)"),
-    "欺诈 洗钱 腐败":                      ("fraud",     "eleve",  "Fraude (ZH)"),
-    "trustpilot":                         ("reputation","faible", "Avis Trustpilot"),
-    "signal-arnaques":                    ("reputation","eleve",  "Signal arnaque"),
-    "opensanctions.org":                  ("sanctions", "eleve",  "OpenSanctions"),
-    "amf-france.org":                     ("sanctions", "eleve",  "AMF France"),
-    "acpr.banque-france.fr":              ("sanctions", "eleve",  "ACPR"),
-    "bodacc.fr":                          ("judicial",  "moyen",  "BODACC"),
-    "infogreffe.fr":                      ("judicial",  "faible", "Infogreffe / Registre"),
-    "sec.gov":                            ("sanctions", "eleve",  "SEC USA"),
-    "ofac.treas.gov":                     ("sanctions", "eleve",  "OFAC USA"),
-    "twitter.com":                        ("reputation","faible", "Twitter / X"),
-    "linkedin.com":                       ("reputation","faible", "LinkedIn"),
-    "reddit.com":                         ("reputation","faible", "Reddit"),
-    "facebook.com":                       ("reputation","faible", "Facebook"),
-    "reputation":                         ("reputation","faible", "Réseau social / Divers"),
-}
-DEFAULT_CAT_INFO = ("reputation", "faible", "Résultat web générique")
-
-
-def analyze_local(entity: str, search_results_with_cat: list, scraped_texts: list,
-                  os_result: dict, filter_level: int = 0) -> dict:
+def run_osint_analysis(entity: str, all_results_with_meta: list,
+                       scraped_texts: list, os_result: dict) -> dict:
     """
-    NOUVEAU MOTEUR v6 — logique inversée :
-    Chaque résultat retourné par une requête NÉGATIVE est une alerte potentielle.
-    La requête était déjà ciblée (ex: '"Jean Dupont" fraude arnaque').
-    Si DuckDuckGo retourne un résultat → c'est un signal, POINT.
-    On ne cherche plus les mots-clés dans les snippets.
-
-    search_results_with_cat = liste de dicts avec champ "query_cat" en plus.
+    Core scoring logic.
+    all_results_with_meta: each dict has keys title, url, snippet,
+      query_cat, query_gravity, query_label.
+    Returns structured analysis dict used by PDF, Excel, and UI.
     """
-    entity_low    = entity.lower().strip()
-    entity_words  = [w for w in entity_low.split() if len(w) >= 3]
+    entity_low   = entity.lower().strip()
+    entity_words = [w for w in entity_low.split() if len(w) >= 3]
     entity_tokens = list(set([entity_low] + entity_words))
     if len(entity_words) >= 2:
         entity_tokens += [entity_words[0], entity_words[-1]]
 
-    def entity_present(txt: str) -> bool:
+    def entity_in_text(txt: str) -> bool:
         t = " " + txt.lower() + " "
         return any(tok in t for tok in entity_tokens)
 
-    negative_news    = []
-    all_articles     = []
-    scores_by_cat    = {"sanctions":0.0,"fraud":0.0,"judicial":0.0,"reputation":0.0,"pep":0.0,"positive":0.0}
-    triggered_kws    = []  # mots/requêtes déclencheurs pour chaque alerte
+    scores = {k: 0.0 for k in SCORE_WEIGHTS}
+    negative_news, all_articles = [], []
 
-    for r in search_results_with_cat:
+    for r in all_results_with_meta:
         title   = r.get("title","")
         url     = r.get("url","")
         snippet = r.get("snippet","")
         domain  = urlparse(url).netloc.replace("www.","")
         cred    = SOURCE_CREDIBILITY.get(domain, 1.0)
-        query_cat = r.get("query_cat","")
-        query_str = r.get("query_str","")
+        q_cat   = r.get("query_cat","reputation")
+        q_grav  = r.get("query_gravity","faible")
+        q_label = r.get("query_label","Recherche web")
 
-        combined = f"{title} {snippet}"
-        ent_found = entity_present(combined) or entity_present(url)
+        combined    = f"{title} {snippet}"
+        entity_hit  = entity_in_text(combined) or entity_in_text(url)
+        combined_lo = combined.lower()
 
-        # Store for human review — ALL results
+        # Find negative keywords present in this result
+        triggered = [w for w in NEGATIVE_KEYWORDS if w in combined_lo]
+
         all_articles.append({
-            "title":            title,
-            "url":              url,
-            "snippet":          snippet,
-            "domain":           domain,
-            "entity_mentioned": ent_found,
-            "query_cat":        query_cat,
-            "query_str":        query_str,
+            "title":title, "url":url, "snippet":snippet,
+            "domain":domain, "entity_mentioned":entity_hit,
+            "query_label":q_label, "triggered_keywords":triggered,
         })
 
-        # At FL=0: every result from a negative query IS an alert
-        # At FL>=1: only if entity is mentioned in title/snippet
-        #if filter_level >= 4 and not ent_found:
-            #continue
+        # ── SCORING: result from a targeted negative query IS a signal ──
+        # Even if no keyword in snippet, the query already was negative.
+        weight = GRAVITY_WEIGHTS.get(q_grav, 1.0) * cred
+        scores[q_cat] = scores.get(q_cat, 0.0) + weight
 
-        # Get category info from the query that produced this result
-        cat_info = QUERY_CAT_INFO.get(query_cat, DEFAULT_CAT_INFO)
-        cat, gravite, nature = cat_info
-
-        # Skip pure positive registries (infogreffe, linkedin) unless entity mentioned
-        if cat in ("reputation",) and query_cat in ("infogreffe.fr","linkedin.com") and not ent_found:
-            gravite = "faible"
-
-        # Score contribution
-        weight = {"eleve":5.0, "moyen":3.0, "faible":1.0}.get(gravite, 1.0) * cred
-        scores_by_cat[cat] = scores_by_cat.get(cat, 0.0) + weight
-
-        # Identify which words in title/snippet match negative keywords
-        combined_low = combined.lower()
-        triggered = []
-        NEG_WORDS = [
-            "fraude","fraud","arnaque","scam","escroquerie","corruption","condamné",
-            "convicted","sanctionné","sanctioned","blanchiment","laundering","faillite",
-            "bankruptcy","tribunal","lawsuit","arresté","arrested","blacklist","liste noire",
-            "détournement","embezzlement","plainte","complaint","victime","victim",
-            "jugement","sentenced","peine","prison","inculpé","indicted","perquisition",
-            "санкции","мошенничество","احتيال","عقوبات","欺诈","制裁","estafa","corrupción",
-            "sanction","interdiction","liquidation","redressement","interdit",
-        ]
-        for w in NEG_WORDS:
-            if w in combined_low:
-                triggered.append(w)
-        # Also always note the query category as trigger
-        if not triggered:
-            triggered = [f"[requête: {query_cat[:40]}]"]
-
+        # Build negative news entry
+        nature_map = {
+            "sanctions": "Sanction / Liste internationale",
+            "fraud":     "Fraude / Crime financier",
+            "judicial":  "Procédure judiciaire",
+            "reputation":"Signal réputationnel",
+            "pep":       "Exposition PEP",
+        }
         negative_news.append({
-            "titre":        title[:120] if title else url[:80],
+            "titre":        title[:120] or url[:80],
             "source":       domain,
             "url":          url,
             "snippet":      snippet[:200],
-            "date":         "",
-            "nature":       nature,
-            "gravite":      gravite,
-            "mots_cles":    triggered[:6],
-            "query_cat":    query_cat,
-            "query_str":    query_str[:80],
+            "nature":       nature_map.get(q_cat, q_label),
+            "gravite":      q_grav,
+            "mots_cles":    triggered[:6] if triggered else [f"[requête: {q_label}]"],
+            "query_label":  q_label,
             "score_brut":   round(weight, 1),
-            "cat":          cat,
-            "entity_found": ent_found,
+            "category":     q_cat,
+            "entity_found": entity_hit,
         })
 
-    # OpenSanctions
+    # OpenSanctions results (highest weight)
     if os_result.get("found"):
-        scores_by_cat["sanctions"] += os_result["count"] * 15
+        scores["sanctions"] += os_result["count"] * 15
         for r in os_result.get("results",[]):
             negative_news.insert(0, {
-                "titre":     f"OpenSanctions : {r.get('caption','')}",
-                "source":    "opensanctions.org",
-                "url":       f"https://www.opensanctions.org/entities/{r.get('id','')}",
-                "snippet":   f"Datasets: {', '.join(r.get('datasets',[]))}",
-                "date":      "",
-                "nature":    "Sanction internationale confirmée",
-                "gravite":   "eleve",
-                "mots_cles": ["opensanctions"] + r.get("datasets",[])[:3],
-                "query_cat": "opensanctions.org",
-                "query_str": "",
-                "score_brut":15.0,
-                "cat":       "sanctions",
-                "entity_found": True,
+                "titre":      f"OpenSanctions : {r.get('caption','')}",
+                "source":     "opensanctions.org",
+                "url":        f"https://www.opensanctions.org/entities/{r.get('id','')}",
+                "snippet":    f"Datasets: {', '.join(r.get('datasets',[]))}",
+                "nature":     "Sanction internationale confirmée",
+                "gravite":    "eleve",
+                "mots_cles":  ["opensanctions"] + r.get("datasets",[])[:3],
+                "query_label":"OpenSanctions API",
+                "score_brut": 15.0,
+                "category":   "sanctions",
+                "entity_found":True,
             })
 
-    # Deduplicate by URL
-    seen_urls, neg_dedup = set(), []
+    # Deduplicate by URL (keep highest score per URL)
+    seen_urls, neg_dedup = {}, []
     for n in sorted(negative_news, key=lambda x: x["score_brut"], reverse=True):
         u = n.get("url","") or n.get("titre","")[:60]
         if u not in seen_urls:
-            seen_urls.add(u)
-            neg_dedup.append(n)
+            seen_urls[u] = True; neg_dedup.append(n)
 
-    # Final score
-    raw = (
-        scores_by_cat.get("sanctions",0) * 3.0 +
-        scores_by_cat.get("fraud",0)     * 2.5 +
-        scores_by_cat.get("judicial",0)  * 2.0 +
-        scores_by_cat.get("reputation",0)* 1.5 +
-        scores_by_cat.get("pep",0)       * 1.0
-    )
+    # Final risk score (0-100)
+    raw = sum(scores.get(cat, 0) * w for cat, w in SCORE_WEIGHTS.items())
     score = min(100, max(0, int(raw * 1.5)))
 
-    if score >= 70:    niveau = "CRITIQUE"
-    elif score >= 40:  niveau = "ELEVE"
-    elif score >= 10:  niveau = "MODERE"
-    else:              niveau = "FAIBLE"
+    niveau = "FAIBLE"
+    for lvl, threshold in [("CRITIQUE",70),("ELEVE",40),("MODERE",10)]:
+        if score >= threshold: niveau = lvl; break
 
-    reco = ("REFUSER"              if score >= 20 or os_result.get("found") else
-            "VIGILANCE_RENFORCEE"  if score >= 5  or len(neg_dedup) >= 1 else
+    reco = ("REFUSER"           if score >= 20 or os_result.get("found") else
+            "VIGILANCE_RENFORCEE" if score >= 5 or len(neg_dedup) >= 1 else
             "ACCEPTER")
 
-    nb_neg    = len(neg_dedup) 
     nb_entity = sum(1 for n in neg_dedup if n.get("entity_found"))
-    nb_total  = len(all_articles)
-    src_count = len(neg_dedup)
 
-    sanctions_trouve  = os_result.get("found",False) or scores_by_cat.get("sanctions",0) > 3
-    sanctions_details = ""
-    if os_result.get("found"):
-        sanctions_details = f"{os_result['count']} résultat(s) : " + \
-            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:3])
-    elif scores_by_cat.get("sanctions",0) > 3:
-        sanctions_details = f"Score sanctions : {round(scores_by_cat['sanctions'],1)} — vérifier sources ci-dessous"
-
-    litiges_trouve  = scores_by_cat.get("judicial",0) > 2
-    litiges_details = f"Score judiciaire : {round(scores_by_cat.get('judicial',0),1)}" if litiges_trouve else ""
-    pep_trouve      = scores_by_cat.get("pep",0) > 2
-    pep_details     = "Indicateurs PEP — vérification requise." if pep_trouve else ""
-
-    rep = scores_by_cat.get("reputation",0)
-    pos = scores_by_cat.get("positive",0)
-    rep_notations = (f"Réputation dégradée (score:{round(rep,1)})" if rep > 3
-                     else "Aucun signal réputation majeur.")
-
-    fl_label = {0:"Aucun filtre (tout remonter)",1:"Très léger",2:"Léger",3:"Léger+",
-                4:"Modéré",5:"Modéré+",6:"Modéré++",7:"Strict",8:"Strict+",
-                9:"Très strict",10:"Extrême"}.get(filter_level,"")
-
-    resume = (f"Screening de {nb_total} résultats. "
-              f"{nb_neg} alerte(s) remontée(s) dont {nb_entity} mentionnant directement {entity}. "
-              f"Filtre : {filter_level}/10 ({fl_label}). Revue humaine requise.")
-
+    # Aggravating / attenuating factors
     aggravants, attenuants = [], []
     if os_result.get("found"):
         aggravants.append(f"{os_result['count']} entrée(s) OpenSanctions confirmée(s)")
-    if scores_by_cat.get("fraud",0) > 3:
-        aggravants.append(f"Signaux fraude/corruption (score:{round(scores_by_cat['fraud'],1)})")
-    if scores_by_cat.get("judicial",0) > 2:
-        aggravants.append(f"Signaux procédures judiciaires (score:{round(scores_by_cat['judicial'],1)})")
-    if scores_by_cat.get("sanctions",0) > 3:
-        aggravants.append(f"Signaux sanctions/listes (score:{round(scores_by_cat['sanctions'],1)})")
-    if nb_entity == 0 and nb_neg > 0:
-        attenuants.append(f"{nb_neg} alertes sans mention directe — possibles faux positifs")
+    if scores.get("fraud",0) > 3:
+        aggravants.append(f"Signaux fraude/corruption (score:{round(scores['fraud'],1)})")
+    if scores.get("judicial",0) > 2:
+        aggravants.append(f"Signaux procédures judiciaires (score:{round(scores['judicial'],1)})")
+    if scores.get("sanctions",0) > 3:
+        aggravants.append(f"Signaux sanctions/listes (score:{round(scores['sanctions'],1)})")
+    if nb_entity == 0 and len(neg_dedup) > 0:
+        attenuants.append(f"{len(neg_dedup)} alertes sans mention directe — possibles faux positifs")
     if not os_result.get("found"):
         attenuants.append("Absent des listes OpenSanctions consultées")
+
+    resume = (
+        f"Analyse OSINT de '{entity}' : {len(all_articles)} résultats collectés, "
+        f"{len(neg_dedup)} signal(aux) remontés dont {nb_entity} mentionnant "
+        f"directement l'entité. Score de risque : {score}/100 ({niveau}). "
+        f"Recommandation : {reco}. Revue humaine obligatoire avant toute décision."
+    )
 
     return {
         "score_risque":        score,
         "niveau_risque":       niveau,
         "resume_executif":     resume,
+        "recommandation":      reco,
         "negative_news":       neg_dedup,
         "all_articles":        all_articles,
-        "sanctions":           {"trouve": sanctions_trouve,  "details": sanctions_details},
-        "litiges_judiciaires": {"trouve": litiges_trouve,    "details": litiges_details},
-        "pep_exposure":        {"trouve": pep_trouve,        "details": pep_details},
-        "reputation_notations":rep_notations,
+        "sanctions":           {"trouve": os_result.get("found",False) or scores.get("sanctions",0)>3,
+                                "details": f"{os_result['count']} OpenSanctions" if os_result.get("found") else ""},
+        "litiges_judiciaires": {"trouve": scores.get("judicial",0)>2,
+                                "details": f"Score judiciaire : {round(scores.get('judicial',0),1)}"},
+        "pep_exposure":        {"trouve": scores.get("pep",0)>2, "details":""},
         "facteurs_aggravants": aggravants,
         "facteurs_attenuants": attenuants,
-        "recommandation":      reco,
-        "sources_consultees":  list(set(n["source"] for n in neg_dedup if n.get("source")))[:30],
-        "confiance_analyse":   "ELEVEE" if nb_entity >= 3 else ("MOYENNE" if nb_entity >= 1 else "FAIBLE"),
-        "scores_categories":   {k: round(v,1) for k,v in scores_by_cat.items()},
-        "nb_sources_filtrees": src_count,
-        "nb_sources_total":    nb_total,
-        "nb_entity_direct":    nb_entity,
-        "filter_level_used":   filter_level,
-        "moteur":              "v6_query_based",
+        "sources_consultees":  list({n["source"] for n in neg_dedup if n.get("source")})[:30],
+        "scores_categories":   {k: round(v,1) for k,v in scores.items()},
+        "nb_sources_total":    len(all_articles),
+        "nb_sources_filtrees": nb_entity,
+        "os_result":           os_result,
     }
 
-def analyze_with_groq(entity, search_results, scraped_texts, groq_key) -> dict:
-    """Groq LLM boost — gratuit 14 400 req/jour sur console.groq.com"""
-    ctx = []
-    for i, sr in enumerate(search_results[:12]):
-        ctx.append(f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:180]}")
-    for i, t in enumerate(scraped_texts[:3]):
-        if t.strip():
-            ctx.append(f"[P{i+1}] {t[:600]}")
-    prompt = f"""Tu es un analyste KYC/AML/LCB-FT expert. Entite: {entity}
-Sources OSINT collectees:
-{chr(10).join(ctx)}
-REGLE STRICTE: retenir TOUS les elements negatifs meme non confirmes.
-Reponds UNIQUEMENT avec ce JSON:
-{{"score_risque":0,"niveau_risque":"FAIBLE","resume_executif":"","negative_news":[{{"titre":"","source":"","date":"","nature":"","gravite":"faible","url":""}}],"sanctions":{{"trouve":false,"details":""}},"litiges_judiciaires":{{"trouve":false,"details":""}},"pep_exposure":{{"trouve":false,"details":""}},"reputation_notations":"","facteurs_aggravants":[],"facteurs_attenuants":[],"recommandation":"ACCEPTER","confiance_analyse":"MOYENNE"}}"""
-    try:
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-            json={"model":"llama-3.1-8b-instant","messages":[{"role":"user","content":prompt}],
-                  "max_tokens":2000,"temperature":0.1}, timeout=30)
-        if r.status_code == 200:
-            raw = r.json()["choices"][0]["message"]["content"].strip()
-            raw = re.sub(r'^```json\s*','',raw); raw = re.sub(r'\s*```$','',raw)
-            result = json.loads(raw)
-            result["moteur"] = "groq_llama3"
-            return result
-    except: pass
-    return None
 
+# ─────────────────────────────────────────────────────────────────
+# § 5  PDF REPORT
+# ─────────────────────────────────────────────────────────────────
 
-def analyze_with_ollama(entity, search_results, scraped_texts) -> dict:
-    ctx = [f"[S{i+1}] {sr.get('title','')} | {sr.get('snippet','')[:150]}"
-           for i, sr in enumerate(search_results[:10])]
-    prompt = f"Analyste KYC. Entite: {entity}\nSources: {chr(10).join(ctx)}\nReponds JSON uniquement."
-    try:
-        r = requests.post("http://localhost:11434/api/generate",
-            json={"model":"llama3.2","prompt":prompt,"stream":False}, timeout=60)
-        if r.status_code == 200:
-            raw = r.json().get("response","").strip()
-            raw = re.sub(r'^```json\s*','',raw); raw = re.sub(r'\s*```$','',raw)
-            result = json.loads(raw)
-            result["moteur"] = "ollama_local"
-            return result
-    except: pass
-    return None
-
-def generate_pdf_report(entity, iban_result, bank_info, os_result, analysis,
-                        human_decision=None, human_comment="", analyst_name=""):
-    """
-    Génère le rapport PDF.
-    human_decision : None | 'RAS' | 'RISQUE_CONFIRME'
-    """
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.colors import HexColor
-    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
-                                    Table, TableStyle, HRFlowable)
-    from reportlab.lib.units import mm
-
-    buf  = BytesIO()
-    doc  = SimpleDocTemplate(buf, pagesize=A4,
-                              leftMargin=18*mm, rightMargin=18*mm,
-                              topMargin=16*mm,  bottomMargin=16*mm)
-
-    BG=HexColor("#0a0d14"); SURF=HexColor("#111520"); BORD=HexColor("#1e2535")
-    ACC=HexColor("#00d4ff"); GREEN=HexColor("#00cc66"); RED=HexColor("#ff3366")
-    YEL=HexColor("#ffcc00"); TEXT=HexColor("#c8d6e5"); MUTED=HexColor("#5a6a7a")
-    ACC2=HexColor("#ff6b35"); WHITE=HexColor("#ffffff")
-
+def _pdf_styles():
+    """Return ReportLab color palette and paragraph styles."""
+    BG   = HexColor("#0a0d14"); SURF = HexColor("#111520"); BORD = HexColor("#1e2535")
+    ACC  = HexColor("#00d4ff"); GREEN= HexColor("#00cc66"); RED  = HexColor("#ff3366")
+    YEL  = HexColor("#ffcc00"); TEXT = HexColor("#c8d6e5"); MUTED= HexColor("#5a6a7a")
+    ACC2 = HexColor("#ff6b35"); WHITE= HexColor("#ffffff")
     styles = getSampleStyleSheet()
-    def S(nm,**kw): return ParagraphStyle(nm,parent=styles["Normal"],**kw)
-    sH1   = S("H1", fontSize=11,textColor=ACC,  fontName="Helvetica-Bold",spaceBefore=12,spaceAfter=5)
-    sBody = S("B",  fontSize=8.5,textColor=TEXT,fontName="Helvetica",     spaceAfter=3, leading=13)
-    sSmall= S("Sm", fontSize=7.5,textColor=MUTED,fontName="Helvetica",    spaceAfter=2)
-    sMono = S("Mo", fontSize=8,  textColor=ACC2, fontName="Courier",      spaceAfter=2)
-    sWarn = S("W",  fontSize=9,  textColor=YEL,  fontName="Helvetica-Bold",spaceAfter=4)
-    sOK   = S("OK", fontSize=9,  textColor=GREEN,fontName="Helvetica-Bold",spaceAfter=4)
-    sRed  = S("Rd", fontSize=9,  textColor=RED,  fontName="Helvetica-Bold",spaceAfter=4)
+    def S(nm,**kw): return ParagraphStyle(nm, parent=styles["Normal"], **kw)
+    return {
+        "BG":BG,"SURF":SURF,"BORD":BORD,"ACC":ACC,"GREEN":GREEN,"RED":RED,
+        "YEL":YEL,"TEXT":TEXT,"MUTED":MUTED,"ACC2":ACC2,"WHITE":WHITE,
+        "sH1": S("H1",fontSize=11,textColor=ACC,fontName="Helvetica-Bold",spaceBefore=12,spaceAfter=5),
+        "sH2": S("H2",fontSize=9.5,textColor=ACC2,fontName="Helvetica-Bold",spaceBefore=8,spaceAfter=4),
+        "sBody":S("B", fontSize=8.5,textColor=TEXT,fontName="Helvetica",spaceAfter=3,leading=13),
+        "sSmall":S("Sm",fontSize=7.5,textColor=MUTED,fontName="Helvetica",spaceAfter=2),
+        "sWarn": S("W", fontSize=9,textColor=YEL,fontName="Helvetica-Bold",spaceAfter=4),
+        "sOK":  S("OK",fontSize=9,textColor=GREEN,fontName="Helvetica-Bold",spaceAfter=4),
+        "sRed": S("Rd",fontSize=9,textColor=RED,fontName="Helvetica-Bold",spaceAfter=4),
+    }
 
-    niveau  = analysis.get("niveau_risque","N/A")
-    score   = analysis.get("score_risque","N/A")
-    reco    = analysis.get("recommandation","N/A")
-    fl      = analysis.get("filter_level_used", "N/A")
-    rcolor  = {"FAIBLE":GREEN,"MODERE":YEL,"ELEVE":ACC2,"CRITIQUE":RED}.get(niveau,MUTED)
-    rccolor = {"ACCEPTER":GREEN,"VIGILANCE_RENFORCEE":YEL,"REFUSER":RED}.get(reco,MUTED)
+def generate_osint_pdf(entity: str, analysis: dict, os_result: dict,
+                       iban_data: dict = None, bank_data: dict = None,
+                       human_decision=None, human_comment="", analyst_name="") -> bytes:
+    """
+    Generate a professional OSINT-only PDF report.
+    Sections:
+      1. Cover / Header
+      2. Human validation stamp
+      3. Executive summary + risk score
+      4. Regulatory checks (sanctions, PEP, litigation)
+      5. Negative signals table
+      6. Full source list for human review
+      7. Risk factors
+      8. Limits / disclaimer
+    """
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                             leftMargin=18*mm, rightMargin=18*mm,
+                             topMargin=16*mm,  bottomMargin=16*mm)
+    c   = _pdf_styles()
+    story = []
     now_str = datetime.now().strftime("%d/%m/%Y à %H:%M:%S")
 
-    story = []
+    # ── Helpers ───────────────────────────────────────────────────
+    def tbl(rows, widths, style_extra=None):
+        t = Table(rows, colWidths=widths)
+        ts = TableStyle([
+            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),
+            ("FONTSIZE",(0,0),(-1,-1),8),
+            ("BACKGROUND",(0,0),(-1,-1),c["BG"]),
+            ("TEXTCOLOR",(0,0),(-1,-1),c["TEXT"]),
+            ("GRID",(0,0),(-1,-1),0.3,c["BORD"]),
+            ("TOPPADDING",(0,0),(-1,-1),4),
+            ("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ])
+        if style_extra:
+            for cmd in style_extra: ts.add(*cmd)
+        t.setStyle(ts); return t
 
-    # ── Header ────────────────────────────────────────────────────
-    story.append(Table(
-        [["🛡️  FinShield OSINT — Rapport de Conformité",
-          f"Généré le\n{now_str}"]],
-        colWidths=[120*mm,52*mm],
-        style=TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1),BG),
-            ("TEXTCOLOR",(0,0),(0,0),ACC),("TEXTCOLOR",(1,0),(1,0),MUTED),
-            ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),14),
-            ("FONTSIZE",(1,0),(1,0),8),("ALIGN",(1,0),(1,0),"RIGHT"),
-            ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10),
-        ])))
-    story.append(HRFlowable(width="100%",thickness=1.5,color=ACC,spaceAfter=12))
+    score  = analysis.get("score_risque",0)
+    niveau = analysis.get("niveau_risque","FAIBLE")
+    reco   = analysis.get("recommandation","ACCEPTER")
+    neg_n  = analysis.get("negative_news",[])
+    all_art= analysis.get("all_articles",[])
+    nb_tot = analysis.get("nb_sources_total",0)
+    nb_ent = analysis.get("nb_sources_filtrees",0)
 
-    # ── Entity ────────────────────────────────────────────────────
-    story.append(Paragraph(f"Entité analysée : <b>{entity}</b>", sH1))
+    rcolor = {"FAIBLE":c["GREEN"],"MODERE":c["YEL"],"ELEVE":c["ACC2"],"CRITIQUE":c["RED"]}.get(niveau,c["MUTED"])
+    rccolor= {"ACCEPTER":c["GREEN"],"VIGILANCE_RENFORCEE":c["YEL"],"REFUSER":c["RED"]}.get(reco,c["MUTED"])
 
-    # ── Human validation stamp ────────────────────────────────────
-    if human_decision == "RAS":
-        stamp_color = GREEN
-        stamp_text  = "✅  VALIDATION HUMAINE — RAS (Rien à Signaler)"
-        stamp_sub   = f"L'analyste confirme : aucune information négative retenue après examen."
-    elif human_decision == "RISQUE_CONFIRME":
-        stamp_color = RED
-        stamp_text  = "⚠️  VALIDATION HUMAINE — INFORMATIONS NÉGATIVES CONFIRMÉES"
-        stamp_sub   = f"L'analyste confirme les signaux détectés par FinShield."
-    else:
-        stamp_color = MUTED
-        stamp_text  = "⏳  EN ATTENTE DE VALIDATION HUMAINE"
-        stamp_sub   = "Ce rapport est un résultat automatique non encore validé par un analyste."
+    # ─── 1. HEADER ───────────────────────────────────────────────
+    story.append(tbl(
+        [["🛡️  FinShield OSINT — Rapport de Conformité", f"Généré le\n{now_str}"]],
+        [120*mm, 52*mm],
+        [("BACKGROUND",(0,0),(-1,-1),c["BG"]),
+         ("TEXTCOLOR",(0,0),(0,0),c["ACC"]),("TEXTCOLOR",(1,0),(1,0),c["MUTED"]),
+         ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),14),
+         ("FONTSIZE",(1,0),(1,0),8),("ALIGN",(1,0),(1,0),"RIGHT"),
+         ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10)]))
+    story.append(HRFlowable(width="100%",thickness=1.5,color=c["ACC"],spaceAfter=10))
+    story.append(Paragraph(f"Entité analysée : <b>{entity}</b>", c["sH1"]))
 
-    story.append(Table(
-        [[stamp_text]],
-        colWidths=[172*mm],
-        style=TableStyle([
-            ("BACKGROUND",(0,0),(0,0),BG),
-            ("TEXTCOLOR",(0,0),(0,0),stamp_color),
-            ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),10),
-            ("ALIGN",(0,0),(0,0),"CENTER"),("VALIGN",(0,0),(0,0),"MIDDLE"),
-            ("TOPPADDING",(0,0),(0,0),10),("BOTTOMPADDING",(0,0),(0,0),6),
-            ("BOX",(0,0),(0,0),1.5,stamp_color),
-        ])))
-    story.append(Paragraph(stamp_sub, sSmall))
-
+    # ─── 2. HUMAN VALIDATION STAMP ───────────────────────────────
+    stamp_map = {
+        "RAS":             (c["GREEN"], "✅  VALIDATION HUMAINE — RAS (Rien à Signaler)",
+                            "L'analyste confirme : aucune information négative retenue après examen."),
+        "RISQUE_CONFIRME": (c["RED"],   "⚠️  VALIDATION HUMAINE — RISQUES CONFIRMÉS",
+                            "L'analyste confirme les signaux négatifs détectés."),
+        None:              (c["MUTED"], "⏳  EN ATTENTE DE VALIDATION HUMAINE",
+                            "Résultat automatique — non encore validé par un analyste."),
+    }
+    s_color, s_text, s_sub = stamp_map.get(human_decision, stamp_map[None])
+    story.append(tbl([[s_text]], [172*mm],
+        [("BACKGROUND",(0,0),(0,0),c["BG"]),("TEXTCOLOR",(0,0),(0,0),s_color),
+         ("FONTNAME",(0,0),(0,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(0,0),10),
+         ("ALIGN",(0,0),(0,0),"CENTER"),("TOPPADDING",(0,0),(0,0),10),
+         ("BOTTOMPADDING",(0,0),(0,0),6),("BOX",(0,0),(0,0),1.5,s_color)]))
+    story.append(Paragraph(s_sub, c["sSmall"]))
     if analyst_name or human_comment:
         rows = []
-        if analyst_name:
-            rows.append(["Analyste",    analyst_name])
-        if human_comment:
-            rows.append(["Commentaire", human_comment])
-        rows.append(["Date validation", now_str])
-        t = Table(rows, colWidths=[38*mm,134*mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1),BG),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
-            ("TEXTCOLOR",(0,0),(0,-1),MUTED),("TEXTCOLOR",(1,0),(-1,-1),TEXT),
-            ("GRID",(0,0),(-1,-1),0.3,BORD),
-            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]))
-        story.append(t)
+        if analyst_name:    rows.append(["Analyste", analyst_name])
+        if human_comment:   rows.append(["Commentaire", human_comment])
+        rows.append(["Date", now_str])
+        story.append(tbl(rows, [38*mm,134*mm],
+            [("TEXTCOLOR",(0,0),(0,-1),c["MUTED"])]))
     story.append(Spacer(1,8))
 
-    # ── Score box ─────────────────────────────────────────────────
-    story.append(Table(
+    # ─── 3. SCORE BOX ────────────────────────────────────────────
+    story.append(tbl(
         [[f"Score : {score}/100", f"Niveau : {niveau}",
-          f"Recommandation : {reco}", f"Filtre : {fl}/10"]],
-        colWidths=[40*mm,38*mm,60*mm,34*mm],
-        style=TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1),SURF),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8.5),
-            ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-            ("TOPPADDING",(0,0),(-1,-1),9),("BOTTOMPADDING",(0,0),(-1,-1),9),
-            ("TEXTCOLOR",(0,0),(0,0),TEXT),
-            ("TEXTCOLOR",(1,0),(1,0),rcolor),("TEXTCOLOR",(2,0),(2,0),rccolor),
-            ("TEXTCOLOR",(3,0),(3,0),MUTED),
-            ("BOX",(0,0),(-1,-1),0.5,BORD),("GRID",(0,0),(-1,-1),0.5,BORD),
-        ])))
-    story.append(Spacer(1,8))
+          f"Recommandation : {reco}", f"Sources : {nb_tot}"]],
+        [40*mm,38*mm,60*mm,34*mm],
+        [("BACKGROUND",(0,0),(-1,-1),c["SURF"]),
+         ("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8.5),
+         ("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+         ("TOPPADDING",(0,0),(-1,-1),9),("BOTTOMPADDING",(0,0),(-1,-1),9),
+         ("TEXTCOLOR",(0,0),(0,0),c["TEXT"]),
+         ("TEXTCOLOR",(1,0),(1,0),rcolor),("TEXTCOLOR",(2,0),(2,0),rccolor),
+         ("TEXTCOLOR",(3,0),(3,0),c["MUTED"]),
+         ("BOX",(0,0),(-1,-1),0.5,c["BORD"]),("GRID",(0,0),(-1,-1),0.5,c["BORD"])]))
+    story.append(Spacer(1,6))
 
-    # ── Summary ───────────────────────────────────────────────────
-    story.append(Paragraph("Résumé exécutif", sH1))
-    story.append(Paragraph(analysis.get("resume_executif","Non disponible."), sBody))
-    story.append(HRFlowable(width="100%",thickness=0.5,color=BORD,spaceAfter=6))
+    # ─── 4. RÉSUMÉ EXÉCUTIF ──────────────────────────────────────
+    story.append(Paragraph("1. Résumé Exécutif", c["sH1"]))
+    story.append(Paragraph(analysis.get("resume_executif","—"), c["sBody"]))
+    story.append(HRFlowable(width="100%",thickness=0.5,color=c["BORD"],spaceAfter=6))
 
-    # ── IBAN ──────────────────────────────────────────────────────
-    if iban_result and iban_result.get("raw"):
-        story.append(Paragraph("Vérification IBAN", sH1))
+    # ─── 5. IBAN (if available) ───────────────────────────────────
+    if iban_data and iban_data.get("raw"):
+        story.append(Paragraph("2. Vérification IBAN", c["sH1"]))
         rows = [["Champ","Valeur"]]
-        for f,v in [("IBAN",iban_result.get("formatted","")),
-                    ("Statut",iban_result.get("message","")),
-                    ("Pays",iban_result.get("country","")),
-                    ("Code banque",iban_result.get("bank_code",""))]:
+        for f,v in [("IBAN",iban_data.get("formatted","")),
+                    ("Statut",iban_data.get("message","")),
+                    ("Pays",iban_data.get("country","")),
+                    ("Code banque",iban_data.get("bank_code",""))]:
             if v: rows.append([f,v])
-        if bank_info:
-            rows += [("Banque",bank_info.get("name","")),
-                     ("Adresse",f"{bank_info.get('address','')} {bank_info.get('city','')}".strip()),
-                     ("BIC",bank_info.get("bic","")),
-                     ("Type",bank_info.get("type",""))]
-        t = Table(rows, colWidths=[40*mm,132*mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
-            ("TEXTCOLOR",(0,1),(0,-1),MUTED),("TEXTCOLOR",(1,1),(-1,-1),TEXT),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),
-            ("GRID",(0,0),(-1,-1),0.3,BORD),
-            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ]))
-        story.append(t); story.append(Spacer(1,8))
+        if bank_data:
+            rows += [["Banque",bank_data.get("name","")],
+                     ["Adresse",f"{bank_data.get('address','')} {bank_data.get('city','')}".strip()],
+                     ["BIC",bank_data.get("bic","")],
+                     ["Type",bank_data.get("type","")]]
+        story.append(tbl(rows, [40*mm,132*mm],
+            [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+             ("TEXTCOLOR",(0,1),(0,-1),c["MUTED"]),
+             ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])]))
+        story.append(Spacer(1,8))
 
-    # ── Regulatory checks ─────────────────────────────────────────
-    story.append(Paragraph("Vérifications Réglementaires (KYC/AML)", sH1))
+    # ─── 6. REGULATORY CHECKS ────────────────────────────────────
+    story.append(Paragraph("3. Vérifications Réglementaires (KYC/AML)", c["sH1"]))
     san = analysis.get("sanctions",{})
     lit = analysis.get("litiges_judiciaires",{})
     pep = analysis.get("pep_exposure",{})
-    rc  = [["Catégorie","Résultat","Détails"],
-           ["Sanctions","DÉTECTÉ" if san.get("trouve") else "Non détecté",san.get("details","")[:85]],
-           ["OpenSanctions",f"{os_result.get('count',0)} hit(s)",
-            ", ".join(r.get("caption","") for r in os_result.get("results",[])[:2])[:85]],
-           ["Litiges judiciaires","DÉTECTÉ" if lit.get("trouve") else "Non détecté",lit.get("details","")[:85]],
-           ["Exposition PEP","DÉTECTÉ" if pep.get("trouve") else "Non détecté",pep.get("details","")[:85]]]
-    t = Table(rc, colWidths=[40*mm,28*mm,104*mm])
-    ts = TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
-        ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),8),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
-        ("GRID",(0,0),(-1,-1),0.3,BORD),
-        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-    ])
-    for i in range(1,5):
-        col = RED if "DÉTECTÉ" in str(rc[i][1]) or (i==2 and os_result.get("count",0)>0) else GREEN
-        ts.add("TEXTCOLOR",(1,i),(1,i),col)
-        ts.add("FONTNAME",(1,i),(1,i),"Helvetica-Bold")
-    t.setStyle(ts); story.append(t); story.append(Spacer(1,8))
+    reg_rows = [
+        ["Catégorie","Statut","Détails"],
+        ["Sanctions / Listes",
+         "DÉTECTÉ" if san.get("trouve") else "Non détecté",
+         san.get("details","")[:85]],
+        ["OpenSanctions",
+         f"{os_result.get('count',0)} hit(s)",
+         ", ".join(r.get("caption","") for r in os_result.get("results",[])[:2])[:85]],
+        ["Litiges judiciaires",
+         "DÉTECTÉ" if lit.get("trouve") else "Non détecté",
+         lit.get("details","")[:85]],
+        ["Exposition PEP",
+         "DÉTECTÉ" if pep.get("trouve") else "Non détecté",
+         pep.get("details","")[:85]],
+    ]
+    t = tbl(reg_rows, [45*mm,28*mm,99*mm],
+        [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+         ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+         ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+    for i in range(1, len(reg_rows)):
+        col = c["RED"] if "DÉTECTÉ" in str(reg_rows[i][1]) or (i==2 and os_result.get("count",0)>0) else c["GREEN"]
+        t._tStyle.add("TEXTCOLOR",(1,i),(1,i),col)
+        t._tStyle.add("FONTNAME",(1,i),(1,i),"Helvetica-Bold")
+    story.append(t); story.append(Spacer(1,8))
 
-    # ── Negative news ─────────────────────────────────────────────
-    neg = analysis.get("negative_news",[])
-    story.append(Paragraph(f"Signaux Négatifs Détectés ({len(neg)})", sH1))
-    if neg:
-        nh = [["Titre","Source","Nature","Gravité","Mots-clés"]]
-        for n in neg[:15]:
+    # ─── 7. NEGATIVE SIGNALS TABLE ───────────────────────────────
+    story.append(Paragraph(f"4. Signaux Négatifs Détectés ({len(neg_n)})", c["sH1"]))
+    story.append(Paragraph(
+        "Chaque ligne ci-dessous provient d'une requête ciblée sur un thème négatif "
+        "(fraude, sanctions, litiges…). La colonne 'Entité ✓' indique si le nom "
+        "recherché apparaît directement dans le titre ou l'extrait.", c["sSmall"]))
+    story.append(Spacer(1,4))
+    if neg_n:
+        gmap = {"faible":c["GREEN"],"moyen":c["YEL"],"eleve":c["RED"]}
+        nh = [["Titre / Source","Nature","Gravité","Mots-clés","Entité ✓"]]
+        for n in neg_n[:20]:
             nh.append([
-                n.get("titre","")[:65],
-                n.get("source","")[:20],
-                n.get("nature","")[:25],
+                f"{n.get('titre','')[:55]}\n{n.get('source','')[:30]}",
+                n.get("nature","")[:28],
                 n.get("gravite","").upper(),
                 ", ".join(n.get("mots_cles",[])[:3])[:30],
+                "✓" if n.get("entity_found") else "—",
             ])
-        t = Table(nh, colWidths=[65*mm,25*mm,30*mm,18*mm,34*mm])
-        gmap = {"FAIBLE":GREEN,"MOYEN":YEL,"ELEVE":RED}
-        ts2 = TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),7),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
-            ("GRID",(0,0),(-1,-1),0.3,BORD),
-            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ])
-        for i,n in enumerate(neg[:15],1):
-            c = gmap.get(n.get("gravite","").upper(),MUTED)
-            ts2.add("TEXTCOLOR",(3,i),(3,i),c)
-            ts2.add("FONTNAME",(3,i),(3,i),"Helvetica-Bold")
-        t.setStyle(ts2); story.append(t)
+        t2 = tbl(nh, [72*mm,35*mm,18*mm,32*mm,15*mm],
+            [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
+             ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+        for i, n in enumerate(neg_n[:20], 1):
+            col = gmap.get(n.get("gravite","").lower(), c["MUTED"])
+            t2._tStyle.add("TEXTCOLOR",(2,i),(2,i),col)
+            t2._tStyle.add("FONTNAME",(2,i),(2,i),"Helvetica-Bold")
+            if n.get("entity_found"):
+                t2._tStyle.add("TEXTCOLOR",(4,i),(4,i),c["GREEN"])
+        story.append(t2)
     else:
-        story.append(Paragraph("Aucun signal négatif détecté dans les sources consultées.", sBody))
+        story.append(Paragraph("Aucun signal négatif détecté.", c["sBody"]))
     story.append(Spacer(1,6))
 
-    # ── All articles (human review list) ──────────────────────────
-    all_art = analysis.get("all_articles",[])
-    story.append(Paragraph(f"Liste complète des sources pour revue humaine ({len(all_art)} articles)", sH1))
+    # ─── 8. FULL SOURCE LIST FOR HUMAN REVIEW ────────────────────
+    story.append(PageBreak())
+    story.append(Paragraph(f"5. Sources Complètes pour Revue Humaine ({len(all_art)} articles)", c["sH1"]))
+    story.append(Paragraph(
+        "Liste exhaustive des pages collectées. L'analyste doit consulter chaque "
+        "article avant toute décision. La colonne 'Entité ✓' confirme la présence "
+        "du nom dans le contenu visible.", c["sSmall"]))
+    story.append(Spacer(1,4))
     if all_art:
-        ah = [["Titre","Domaine","Entité mentionnée"]]
-        for a in all_art[:40]:
+        ah = [["Titre","Domaine","Requête thématique","Entité ✓"]]
+        for a in all_art[:50]:
             ah.append([
-                a.get("title","")[:75],
-                a.get("domain","")[:30],
-                "✓" if a.get("entity_mentioned") else "—"
+                a.get("title","")[:60],
+                a.get("domain","")[:25],
+                a.get("query_label","")[:28],
+                "✓" if a.get("entity_mentioned") else "—",
             ])
-        t = Table(ah, colWidths=[110*mm,42*mm,20*mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),SURF),("TEXTCOLOR",(0,0),(-1,0),ACC),
-            ("FONTNAME",(0,0),(-1,-1),"Helvetica"),("FONTSIZE",(0,0),(-1,-1),7),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[BG,SURF]),("TEXTCOLOR",(0,1),(-1,-1),TEXT),
-            ("GRID",(0,0),(-1,-1),0.3,BORD),
-            ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-            ("TEXTCOLOR",(2,1),(-1,-1),GREEN),
-        ]))
-        story.append(t)
-    story.append(Spacer(1,6))
+        t3 = tbl(ah, [80*mm,32*mm,42*mm,18*mm],
+            [("BACKGROUND",(0,0),(-1,0),c["SURF"]),("TEXTCOLOR",(0,0),(-1,0),c["ACC"]),
+             ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),7),
+             ("ROWBACKGROUNDS",(0,1),(-1,-1),[c["BG"],c["SURF"]])])
+        for i, a in enumerate(all_art[:50], 1):
+            if a.get("entity_mentioned"):
+                t3._tStyle.add("TEXTCOLOR",(3,i),(3,i),c["GREEN"])
+        story.append(t3)
+    story.append(Spacer(1,8))
 
-    # ── Factors ───────────────────────────────────────────────────
+    # ─── 9. RISK FACTORS ─────────────────────────────────────────
     fa = analysis.get("facteurs_aggravants",[])
     fat = analysis.get("facteurs_attenuants",[])
     if fa or fat:
-        story.append(Paragraph("Facteurs de Risque", sH1))
-        c1 = [Paragraph("⚠ Aggravants", S("fa",fontSize=8.5,textColor=RED,fontName="Helvetica-Bold"))]
-        for f in fa: c1.append(Paragraph(f"• {f}", sBody))
-        c2 = [Paragraph("✓ Atténuants", S("ft",fontSize=8.5,textColor=GREEN,fontName="Helvetica-Bold"))]
-        for f in fat: c2.append(Paragraph(f"• {f}", sBody))
+        story.append(Paragraph("6. Facteurs de Risque", c["sH1"]))
+        from reportlab.platypus import KeepTogether
+        c1 = [Paragraph("⚠ Aggravants", ParagraphStyle("fa",fontSize=8.5,
+              textColor=c["RED"],fontName="Helvetica-Bold"))]
+        c1 += [Paragraph(f"• {f}", c["sBody"]) for f in fa] or [Paragraph("Aucun", c["sBody"])]
+        c2 = [Paragraph("✓ Atténuants", ParagraphStyle("ft",fontSize=8.5,
+              textColor=c["GREEN"],fontName="Helvetica-Bold"))]
+        c2 += [Paragraph(f"• {f}", c["sBody"]) for f in fat] or [Paragraph("Aucun", c["sBody"])]
         story.append(Table([[c1,c2]], colWidths=[86*mm,86*mm],
-            style=TableStyle([
-                ("VALIGN",(0,0),(-1,-1),"TOP"),("BACKGROUND",(0,0),(-1,-1),BG),
-                ("GRID",(0,0),(-1,-1),0.3,BORD),
-                ("TOPPADDING",(0,0),(-1,-1),7),("LEFTPADDING",(0,0),(-1,-1),7),
-            ])))
+            style=TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
+                               ("BACKGROUND",(0,0),(-1,-1),c["BG"]),
+                               ("GRID",(0,0),(-1,-1),0.3,c["BORD"]),
+                               ("TOPPADDING",(0,0),(-1,-1),7),
+                               ("LEFTPADDING",(0,0),(-1,-1),7)])))
         story.append(Spacer(1,8))
 
-    # ── Footer ────────────────────────────────────────────────────
-    story.append(HRFlowable(width="100%",thickness=0.5,color=BORD,spaceAfter=4))
+    # ─── 10. LIMITS / DISCLAIMER ─────────────────────────────────
+    story.append(Paragraph("7. Limites et Remarques", c["sH1"]))
+    disclaimer = (
+        "Cette analyse est produite à partir de sources publiques (OSINT) disponibles "
+        "à la date de génération du rapport. Elle ne constitue pas une preuve juridique "
+        "ni un avis de droit. Les résultats dépendent de la qualité et de l'exhaustivité "
+        "des sources interrogées, ainsi que de la présence de l'entité dans ces sources. "
+        "Des homonymes peuvent générer des faux positifs. Une validation humaine par un "
+        "analyste qualifié est indispensable avant toute prise de décision. "
+        "Ce document est à usage interne exclusivement et ne peut être transmis à des tiers "
+        "sans autorisation préalable de la direction conformité."
+    )
+    story.append(Paragraph(disclaimer, c["sSmall"]))
+
+    # ─── FOOTER ──────────────────────────────────────────────────
+    story.append(HRFlowable(width="100%",thickness=0.5,color=c["BORD"],spaceAfter=4))
     verdict = f"VALIDATION : {human_decision or 'EN ATTENTE'}"
     if analyst_name: verdict += f" par {analyst_name}"
     story.append(Paragraph(
-        f"FinShield OSINT v2 · {now_str} · {verdict} · "
-        f"CONFIDENTIEL — Usage interne · Résultat informatif, non constitutif d'un avis juridique.",
-        sSmall))
+        f"FinShield OSINT v3 · {now_str} · {verdict} · "
+        f"CONFIDENTIEL — Usage interne exclusif", c["sSmall"]))
 
     doc.build(story)
     return buf.getvalue()
 
 
-# ══════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
+# § 6  EXCEL HISTORY
+# ─────────────────────────────────────────────────────────────────
+
+def _xl_header_style(cell, bg="#0a0d14", fg="00D4FF", bold=True):
+    cell.font   = Font(bold=bold, color=fg, name="Arial", size=9)
+    cell.fill   = PatternFill("solid", start_color=bg.lstrip("#"), end_color=bg.lstrip("#"))
+    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+def _xl_cell_style(cell, fg="C8D6E5", bg="111520", bold=False, align="left"):
+    cell.font   = Font(bold=bold, color=fg, name="Arial", size=8)
+    cell.fill   = PatternFill("solid", start_color=bg, end_color=bg)
+    cell.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True)
+
+def _xl_border():
+    thin = Side(style="thin", color="1e2535")
+    return Border(left=thin, right=thin, top=thin, bottom=thin)
+
+def append_to_excel_history(entity: str, entity_type: str, analysis: dict,
+                             os_result: dict, iban_data: dict = None,
+                             analyst_name: str = "", human_decision=None) -> str:
+    """
+    Append a search result row to the Excel history file.
+    Creates the file with proper structure if it does not exist.
+    Returns the file path.
+    """
+    path = EXCEL_HISTORY_PATH
+
+    # ── Sheet 1: Historique ───────────────────────────────────────
+    HIST_HEADERS = [
+        "Date", "Entité", "Type", "Score", "Niveau de risque",
+        "Recommandation", "Nb alertes", "Nb entité directe",
+        "Nb sources total", "Sanctions OpenSanctions",
+        "Listes sanctions", "Litiges", "PEP",
+        "IBAN", "Pays IBAN", "Banque",
+        "Analyste", "Décision humaine", "Résumé",
+    ]
+
+    # ── Sheet 2: Alertes ──────────────────────────────────────────
+    ALERT_HEADERS = [
+        "Date", "Entité", "Titre alerte", "Source", "Nature",
+        "Gravité", "Mots-clés", "Entité mentionnée", "URL",
+    ]
+
+    # ── Sheet 3: Sources ─────────────────────────────────────────
+    SOURCE_HEADERS = [
+        "Date", "Entité", "Domaine", "Titre", "Requête thématique",
+        "Entité mentionnée", "URL",
+    ]
+
+    # Load or create workbook
+    if os.path.exists(path):
+        wb = load_workbook(path)
+    else:
+        wb = Workbook()
+        # Remove default sheet
+        if "Sheet" in wb.sheetnames:
+            del wb["Sheet"]
+
+    def get_or_create_sheet(name, headers):
+        if name not in wb.sheetnames:
+            ws = wb.create_sheet(name)
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=h)
+                _xl_header_style(cell)
+                ws.column_dimensions[get_column_letter(col)].width = max(12, len(h)+2)
+            ws.row_dimensions[1].height = 22
+            ws.freeze_panes = "A2"
+        return wb[name]
+
+    ws_hist = get_or_create_sheet("Historique", HIST_HEADERS)
+    ws_alert= get_or_create_sheet("Alertes",   ALERT_HEADERS)
+    ws_src  = get_or_create_sheet("Sources",   SOURCE_HEADERS)
+
+    now_str    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    score      = analysis.get("score_risque", 0)
+    niveau     = analysis.get("niveau_risque","FAIBLE")
+    reco       = analysis.get("recommandation","ACCEPTER")
+    neg_n      = analysis.get("negative_news",[])
+    nb_entity  = analysis.get("nb_sources_filtrees",0)
+    nb_tot     = analysis.get("nb_sources_total",0)
+    san        = analysis.get("sanctions",{})
+    lit        = analysis.get("litiges_judiciaires",{})
+    pep        = analysis.get("pep_exposure",{})
+    iban_str   = iban_data.get("formatted","") if iban_data else ""
+    pays_iban  = iban_data.get("country","")   if iban_data else ""
+    banque_str = ""
+
+    # Risk color for Score cell
+    score_bg = {"FAIBLE":"00cc66","MODERE":"ffcc00","ELEVE":"ff6b35","CRITIQUE":"ff3366"}.get(niveau,"5a6a7a")
+
+    # Row for Historique
+    hist_row = [
+        now_str, entity, entity_type, score, niveau,
+        reco, len(neg_n), nb_entity, nb_tot,
+        os_result.get("count",0),
+        "OUI" if san.get("trouve") else "NON",
+        "OUI" if lit.get("trouve") else "NON",
+        "OUI" if pep.get("trouve") else "NON",
+        iban_str, pays_iban, banque_str,
+        analyst_name or "—",
+        human_decision or "EN ATTENTE",
+        analysis.get("resume_executif","")[:200],
+    ]
+    next_row = ws_hist.max_row + 1
+    for col, val in enumerate(hist_row, 1):
+        cell = ws_hist.cell(row=next_row, column=col, value=val)
+        bg = "111520" if next_row % 2 == 0 else "0a0d14"
+        _xl_cell_style(cell, bg=bg)
+        cell.border = _xl_border()
+    # Color the score cell
+    score_cell = ws_hist.cell(row=next_row, column=4)
+    score_cell.fill = PatternFill("solid", start_color=score_bg, end_color=score_bg)
+    score_cell.font = Font(bold=True, color="0a0d14", name="Arial", size=8)
+    # Color niveau cell
+    niveau_cell = ws_hist.cell(row=next_row, column=5)
+    niveau_cell.fill = PatternFill("solid", start_color=score_bg, end_color=score_bg)
+    niveau_cell.font = Font(bold=True, color="0a0d14", name="Arial", size=8)
+
+    # Rows for Alertes
+    for n in neg_n[:50]:
+        alert_row = [
+            now_str, entity,
+            n.get("titre","")[:100], n.get("source",""),
+            n.get("nature",""), n.get("gravite","").upper(),
+            ", ".join(n.get("mots_cles",[])[:5]),
+            "OUI" if n.get("entity_found") else "NON",
+            n.get("url","")[:150],
+        ]
+        next_a = ws_alert.max_row + 1
+        for col, val in enumerate(alert_row, 1):
+            cell = ws_alert.cell(row=next_a, column=col, value=val)
+            bg = "111520" if next_a % 2 == 0 else "0a0d14"
+            _xl_cell_style(cell, bg=bg)
+            cell.border = _xl_border()
+
+    # Rows for Sources
+    for a in analysis.get("all_articles",[])[:100]:
+        src_row = [
+            now_str, entity,
+            a.get("domain",""), a.get("title","")[:80],
+            a.get("query_label",""),
+            "OUI" if a.get("entity_mentioned") else "NON",
+            a.get("url","")[:150],
+        ]
+        next_s = ws_src.max_row + 1
+        for col, val in enumerate(src_row, 1):
+            cell = ws_src.cell(row=next_s, column=col, value=val)
+            bg = "111520" if next_s % 2 == 0 else "0a0d14"
+            _xl_cell_style(cell, bg=bg)
+            cell.border = _xl_border()
+
+    # Auto-fit columns (approximate)
+    for ws in [ws_hist, ws_alert, ws_src]:
+        for col in ws.columns:
+            max_len = max((len(str(cell.value or "")) for cell in col), default=0)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(60, max(10, max_len+2))
+
+    wb.save(path)
+    return path
+
+
+# ─────────────────────────────────────────────────────────────────
+# § 7  STREAMLIT SIDEBAR
+# ─────────────────────────────────────────────────────────────────
+
 with st.sidebar:
     st.markdown("""
-    <div style='font-family:IBM Plex Mono,monospace;color:#00d4ff;font-size:1.1rem;margin-bottom:4px;'>🛡️ FinShield OSINT</div>
-    <div style='font-size:0.7rem;color:#5a6a7a;letter-spacing:2px;margin-bottom:20px;'>COMPLIANCE · INTELLIGENCE · v2.0</div>
+    <div style='font-family:IBM Plex Mono,monospace;color:#00d4ff;font-size:1.1rem;margin-bottom:4px;'>
+    🛡️ FinShield OSINT v3</div>
+    <div style='font-size:0.7rem;color:#5a6a7a;letter-spacing:2px;margin-bottom:20px;'>
+    COMPLIANCE · INTELLIGENCE · KYC/AML</div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""<div style='font-size:0.72rem;color:#5a6a7a;line-height:1.8;margin-bottom:8px;'>
-    <b style='color:#00ff88;'>✅ Moteur OSINT v5 — zéro filtre par défaut</b><br>
-    Tout remonter · 10 langues · 80+ sources · revue humaine.
-    </div>""", unsafe_allow_html=True)
+    with st.expander("⚡ LLM Boost (optionnel)"):
+        api_key = st.text_input("Clé Groq (gratuite)", type="password",
+                                 placeholder="gsk_...", key="groq_key")
+        st.markdown("""<div style='font-size:0.72rem;color:#5a6a7a;'>
+        Clé gratuite : <a href='https://console.groq.com' target='_blank'
+        style='color:#00d4ff;'>console.groq.com</a></div>""", unsafe_allow_html=True)
 
-    with st.expander("⚡ Booster avec un LLM gratuit (optionnel)"):
-        st.markdown("""<div style='font-size:0.72rem;color:#5a6a7a;line-height:1.8;'>
-        <b style='color:#ffcc00;'>Option A — Groq (cloud gratuit)</b><br>
-        Clé gratuite sur <a href='https://console.groq.com' target='_blank' style='color:#00d4ff;'>console.groq.com</a><br>
-        Modèle : llama-3.1-8b-instant · 14 400 req/jour offerts<br><br>
-        <b style='color:#ffcc00;'>Option B — Ollama (100% local et privé)</b><br>
-        Installer depuis <a href='https://ollama.com' target='_blank' style='color:#00d4ff;'>ollama.com</a> puis :<br>
-        <code>ollama pull llama3.2</code><br>
-        L app detecte automatiquement Ollama si actif sur localhost:11434.
-        </div>""", unsafe_allow_html=True)
-        api_key = st.text_input("Cle Groq (optionnelle)", type="password",
-                                 placeholder="gsk_...", key="groq_key",
-                                 help="Groq gratuit : 14 400 req/jour. Laissez vide pour moteur local.")
     st.markdown("---")
-
-    # DB stats
     conn = get_db()
-    nb_banks    = conn.execute("SELECT COUNT(*) FROM banks").fetchone()[0]
-    nb_ibancountries = conn.execute("SELECT COUNT(*) FROM iban_countries").fetchone()[0]
-    nb_reports  = conn.execute("SELECT COUNT(*) FROM osint_reports").fetchone()[0]
-    nb_watch    = conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]
+    nb_banks   = conn.execute("SELECT COUNT(*) FROM banks").fetchone()[0]
+    nb_ibanc   = conn.execute("SELECT COUNT(*) FROM iban_countries").fetchone()[0]
+    nb_reports = conn.execute("SELECT COUNT(*) FROM osint_reports").fetchone()[0]
+    nb_watch   = conn.execute("SELECT COUNT(*) FROM watchlist").fetchone()[0]
     conn.close()
-
-    st.markdown(f"""
-    <div style='font-size:0.72rem;color:#5a6a7a;line-height:2.0;'>
+    st.markdown(f"""<div style='font-size:0.72rem;color:#5a6a7a;line-height:2.0;'>
     <b style='color:#c8d6e5;'>Base de données</b><br>
     🏦 <span style='color:#00d4ff;'>{nb_banks}</span> banques indexées<br>
-    🌍 <span style='color:#00d4ff;'>{nb_ibancountries}</span> pays IBAN supportés<br>
+    🌍 <span style='color:#00d4ff;'>{nb_ibanc}</span> pays IBAN<br>
     📋 <span style='color:#00d4ff;'>{nb_reports}</span> rapports générés<br>
     👁 <span style='color:#00d4ff;'>{nb_watch}</span> entités sous surveillance<br>
-    </div>
-    """, unsafe_allow_html=True)
+    </div>""", unsafe_allow_html=True)
     st.markdown("---")
     st.caption("SQLite local · Données persistantes")
 
-# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
 # HEADER
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class='header-strip'>
-  <span class='shield-icon'>🛡️</span>
+  <span style='font-size:2.5rem;'>🛡️</span>
   <div>
     <div class='app-title'>FinShield OSINT</div>
-    <div class='app-sub'>Conformité · Due Diligence · Intelligence Financière</div>
+    <div class='app-sub'>Conformité · Due Diligence · Intelligence Financière v3</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
 # TABS
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏦  VÉRIFICATION IBAN",
     "🔍  ANALYSE OSINT",
     "📋  RECHERCHE BANQUE",
-    "🗄️  GESTION BASE DE DONNÉES",
+    "🗄️  GESTION BASE",
     "📁  HISTORIQUE & SURVEILLANCE",
 ])
 
-# ══════════════════════════════════════════════════════════════════
-# TAB 1 — IBAN VERIFICATION
-# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# § 8  TAB 1 — IBAN VERIFICATION
+# ─────────────────────────────────────────────────────────────────
 with tab1:
     st.markdown("## Vérification IBAN")
-    st.markdown("<div class='info-box'>Supporte tous les pays IBAN (43 pays, norme ISO 13616). Validation mod-97, décomposition complète, identification banque via base locale.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='info-box'>43 pays supportés (ISO 13616). Validation mod-97, décomposition complète, identification banque via base locale.</div>", unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([3,1])
     with col1:
-        iban_input = st.text_input("IBAN", placeholder="FR76 3000 4000 0000 0000 0000 000  ·  LU28 0019 4006 4475 0000  ·  DE89 3704 0044 0532 0130 00")
+        iban_input = st.text_input("IBAN", placeholder="FR76 3000 4000 0000 0000 0000 000")
     with col2:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        check_btn = st.button("▶ VÉRIFIER", key="btn_iban")
-
-    if check_btn and iban_input:
-        res = validate_iban(iban_input)
-        country_info = db_get_iban_country(res["country"]) if res["country"] else None
-
-        # Status banner
-        if res["valid"]:
-            st.markdown(f"<div class='ok-box'>{res['message']}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='danger-box'>{res['message']}</div>", unsafe_allow_html=True)
-
-        col_a, col_b, col_c = st.columns([1.2, 1, 1])
-
-        with col_a:
-            st.markdown("#### Décomposition")
-            fields = [
-                ("IBAN formaté", res.get("formatted","")),
-                ("Pays", f"{res.get('country','')} — {country_info['name'] if country_info else 'Inconnu'}"),
-                ("Longueur", f"{len(res['raw'])} car. / {country_info['length'] if country_info else '?'} attendus"),
-                ("Code banque", res.get("bank_code","")),
-                ("Code guichet", res.get("branch_code","")),
-                ("N° compte", res.get("account_no","")),
-                ("Clé RIB", res.get("rib_key","")),
-            ]
-            for label, val in fields:
-                if val and val.strip():
-                    st.markdown(f"""
-                    <div class='result-row'>
-                    <span style='color:#5a6a7a;font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;'>{label}</span><br>
-                    <span style='font-family:IBM Plex Mono,monospace;font-size:0.88rem;'>{val}</span>
-                    </div>""", unsafe_allow_html=True)
-
-        with col_b:
-            st.markdown("#### Structure du pays")
-            if country_info:
-                st.markdown(f"""
-                <div class='metric-card'>
-                  <div class='label'>Pays</div>
-                  <div class='value' style='font-size:1rem;'>{country_info['name']} ({country_info['code']})</div>
-                  <div class='sub'>Longueur : {country_info['length']} caractères</div>
-                  <div class='sub' style='font-family:IBM Plex Mono,monospace;font-size:0.78rem;margin-top:6px;'>{country_info.get('bban_format','')[:50]}</div>
-                </div>""", unsafe_allow_html=True)
-                if country_info.get("example"):
-                    st.markdown(f"<div class='info-box'>Exemple : <code>{country_info['example']}</code></div>", unsafe_allow_html=True)
+        if st.button("▶ VÉRIFIER", key="btn_iban"):
+            res = validate_iban(iban_input)
+            country_info = db_get_iban_country(res["country"]) if res["country"] else None
+            if res["valid"]:
+                st.markdown(f"<div class='ok-box'>{res['message']}</div>", unsafe_allow_html=True)
             else:
-                st.markdown("<div class='warn-box'>Pays non référencé dans la base</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='danger-box'>{res['message']}</div>", unsafe_allow_html=True)
+            ca, cb, cc = st.columns([1.2,1,1])
+            with ca:
+                st.markdown("#### Décomposition")
+                fields = [("IBAN formaté",res.get("formatted","")),
+                          ("Pays",f"{res.get('country','')} — {country_info['name'] if country_info else 'Inconnu'}"),
+                          ("Code banque",res.get("bank_code","")),
+                          ("Code guichet",res.get("branch_code","")),
+                          ("N° compte",res.get("account_no","")),
+                          ("Clé RIB",res.get("rib_key",""))]
+                for label, val in fields:
+                    if val and val.strip():
+                        st.markdown(f"""<div class='result-row'>
+                        <span style='color:#5a6a7a;font-size:0.72rem;text-transform:uppercase;'>{label}</span><br>
+                        <span style='font-family:IBM Plex Mono,monospace;'>{val}</span></div>""", unsafe_allow_html=True)
+            with cb:
+                st.markdown("#### Structure pays")
+                if country_info:
+                    st.markdown(f"""<div class='metric-card'>
+                    <div class='label'>Pays</div><div class='value' style='font-size:1rem;'>
+                    {country_info['name']} ({country_info['code']})</div>
+                    <div class='sub'>Longueur : {country_info['length']} chars</div></div>""", unsafe_allow_html=True)
+                    if country_info.get("example"):
+                        st.markdown(f"<div class='info-box'>Exemple : <code>{country_info['example']}</code></div>", unsafe_allow_html=True)
+            with cc:
+                st.markdown("#### Banque")
+                if res.get("bank_code"):
+                    bank = db_get_bank_by_code(res["bank_code"])
+                    if bank:
+                        st.markdown(f"""<div class='metric-card'>
+                        <div class='label'>Établissement</div>
+                        <div class='value' style='font-size:0.9rem;'>{bank['name']}</div>
+                        <div class='sub'>{bank.get('city','')} · {bank.get('bic','')}</div>
+                        <div style='margin-top:6px;'><span class='badge-low'>{bank.get('type','')}</span></div>
+                        </div>""", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div class='warn-box'>Code <b>{res['bank_code']}</b> non trouvé</div>", unsafe_allow_html=True)
 
-        with col_c:
-            st.markdown("#### Banque identifiée")
-            if res.get("bank_code"):
-                bank = db_get_bank_by_code(res["bank_code"])
-                if bank:
-                    bic_str = f" · BIC: {bank['bic']}" if bank.get("bic") else ""
-                    st.markdown(f"""
-                    <div class='metric-card'>
-                      <div class='label'>Établissement</div>
-                      <div class='value' style='font-size:0.9rem;line-height:1.4;'>{bank['name']}</div>
-                      <div class='sub'>{bank.get('address','')} {bank.get('city','')}</div>
-                      <div class='sub'>{bank.get('postal_code','')} {bank.get('country','')}</div>
-                      <div style='margin-top:6px;font-size:0.75rem;color:#00d4ff;'>{bic_str}</div>
-                      <div style='margin-top:6px;'><span class='badge-low'>{bank.get('type','')}</span></div>
-                    </div>""", unsafe_allow_html=True)
-                    st.markdown(f"<div class='info-box'>🔗 Vérifier sur <a href='https://www.regafi.fr' target='_blank' style='color:#00d4ff;'>REGAFI (ACPR)</a></div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<div class='warn-box'>⚠️ Code <b>{res['bank_code']}</b> non trouvé dans la base.<br><small>Ajoutez-la dans l'onglet <b>Gestion Base</b></small></div>", unsafe_allow_html=True)
+    with st.expander("🌍 Référentiel IBAN"):
+        all_countries = db_get_all_iban_countries()
+        df_c = pd.DataFrame(all_countries)[["code","name","length","example"]]
+        df_c.columns = ["Code","Pays","Longueur","Exemple"]
+        st.dataframe(df_c, use_container_width=True, height=400)
 
-        # Country reference table
-        with st.expander("🌍 Référentiel IBAN — Tous les pays supportés"):
-            all_countries = db_get_all_iban_countries()
-            df_c = pd.DataFrame(all_countries)[["code","name","length","example"]]
-            df_c.columns = ["Code","Pays","Longueur","Exemple"]
-            st.dataframe(df_c, use_container_width=True, height=400)
 
-# ══════════════════════════════════════════════════════════════════
-# TAB 2 — OSINT ANALYSIS
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
+# § 9  TAB 2 — OSINT ANALYSIS
+# ─────────────────────────────────────────────────────────────────
 with tab2:
     st.markdown("## Screening OSINT & Due Diligence")
-    st.markdown("""<div class='info-box'>
-    <b>100% gratuit — aucune clé API requise.</b>
-    Interroge 50+ sources : presse, réseaux sociaux (Twitter/LinkedIn/Facebook/Reddit),
-    Trustpilot, Infogreffe, BODACC, signal-arnaques.com, justice.fr, AMF, ACPR, OpenSanctions, Reuters, Bloomberg et plus.
-    Filtre strict : seuls les signaux directement associés à l entité sont retenus.
+    st.markdown(f"""<div class='info-box'>
+    <b>Moteur v3 — {len(QUERY_CATALOGUE)} requêtes thématiques</b> · 
+    Fraude, blanchiment, sanctions, PEP, litiges, presse mondiale, avis, réseaux sociaux.
+    Chaque résultat issu d'une requête négative est automatiquement qualifié comme signal.
+    <b>Revue humaine obligatoire</b> avant toute décision.
     </div>""", unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([3,1,1])
     with c1:
-        entity_input = st.text_input("Entité à analyser", placeholder="Ex: Jean Dupont  ou  Société XYZ SAS", key="entity_osint")
+        entity_input = st.text_input("Entité à analyser",
+                                      placeholder="Ex: Jean Dupont  ou  Société XYZ SAS", key="entity_osint")
     with c2:
         entity_type = st.selectbox("Type", ["Entreprise","Personne physique","Groupe bancaire","Autre"])
     with c3:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
         launch_btn = st.button("▶ LANCER LE SCREENING", key="btn_osint")
 
-    with st.expander("⚙️ Options"):
+    with st.expander("⚙️ Options avancées"):
         oa, ob = st.columns(2)
         with oa:
             linked_iban  = st.text_input("IBAN lié (optionnel)", key="linked_iban")
             add_to_watch = st.checkbox("Ajouter à la surveillance après analyse")
         with ob:
-            groq_key_tab = st.text_input("Clé Groq (optionnel — booste l analyse)", type="password",
-                                          placeholder="gsk_... gratuit sur console.groq.com", key="groq_tab")
-            st.markdown("""<div style='font-size:0.75rem;color:#5a6a7a;margin-top:12px;margin-bottom:4px;'>
-            <b style='color:#c8d6e5;'>🎚️ Niveau de filtrage des résultats</b><br>
-            <span style='color:#00ff88;'>0</span> = tout remonter (faux positifs possibles) &nbsp;·&nbsp;
-            <span style='color:#ffcc00;'>5</span> = équilibré &nbsp;·&nbsp;
-            <span style='color:#ff3366;'>10</span> = extrême (entité dans ±60 chars du mot-clé)
-            </div>""", unsafe_allow_html=True)
-            filter_level = st.slider("Filtrage", min_value=0, max_value=10, value=0,
-                                      key="filter_slider",
-                                      help="0 = aucun filtre · 3 = légèrement filtré (défaut) · 7 = strict · 10 = extrême")
-            filter_labels = {0:"Aucun filtre",1:"Très léger",2:"Léger",3:"Léger+",
-                             4:"Modéré",5:"Modéré+",6:"Modéré++",
-                             7:"Strict",8:"Strict+",9:"Très strict",10:"Extrême"}
-            fl_color = "#00ff88" if filter_level <= 2 else ("#ffcc00" if filter_level <= 6 else "#ff3366")
-            st.markdown(f"<div style='font-size:0.75rem;color:{fl_color};font-family:IBM Plex Mono,monospace;'>"
-                        f"Niveau {filter_level} — {filter_labels[filter_level]}</div>", unsafe_allow_html=True)
+            groq_key_tab = st.text_input("Clé Groq (optionnel)", type="password",
+                                          placeholder="gsk_...", key="groq_tab")
+            nb_results_per_query = st.slider("Résultats par requête", 3, 8, 5,
+                                              help="Plus = plus exhaustif mais plus lent")
 
-    # ── Session state for PDF persistence ─────────────────────────
-    if "osint_analysis"  not in st.session_state: st.session_state["osint_analysis"]  = None
-    if "osint_entity"    not in st.session_state: st.session_state["osint_entity"]    = ""
-    if "osint_iban_data" not in st.session_state: st.session_state["osint_iban_data"] = {}
-    if "osint_bank_data" not in st.session_state: st.session_state["osint_bank_data"] = {}
-    if "osint_os_result" not in st.session_state: st.session_state["osint_os_result"] = {}
-    if "osint_has_risk"  not in st.session_state: st.session_state["osint_has_risk"]  = False
-    if "osint_results"   not in st.session_state: st.session_state["osint_results"]   = []
+    # Session state
+    for k,v in [("osint_analysis",None),("osint_entity",""),("osint_iban_data",{}),
+                ("osint_bank_data",{}),("osint_os_result",{}),("osint_has_risk",False),
+                ("osint_all_results",[])]:
+        if k not in st.session_state: st.session_state[k] = v
 
     if launch_btn and entity_input.strip():
-        prog = st.progress(0)
-        stat = st.empty()
+        entity = entity_input.strip()
+        prog = st.progress(0); stat = st.empty()
 
         # STEP 1 — OpenSanctions
-        stat.markdown("🔎 **[1/5]** Listes sanctions internationales (OpenSanctions)...")
-        os_result = check_opensanctions(entity_input.strip())
+        stat.markdown("🔎 **[1/4]** OpenSanctions…")
+        os_result = check_opensanctions(entity)
         prog.progress(5)
 
-        # STEP 2 — Build & run queries, tag each result with its query category
-        query_pairs = build_search_queries(entity_input.strip())
-        all_results = []
-        stat.markdown(f"🌐 **[2/5]** Interrogation de 50+ sources ({len(query_pairs)} requêtes)...")
-        for i, (q_str, q_cat) in enumerate(query_pairs):
-            hits = search_web(q_str, num=5)
+        # STEP 2 — Run all queries
+        stat.markdown(f"🌐 **[2/4]** {len(QUERY_CATALOGUE)} requêtes thématiques…")
+        all_results_with_meta = []
+        for i, (q_tpl, q_cat, q_grav, q_label) in enumerate(QUERY_CATALOGUE):
+            q_str = q_tpl.format(e=entity)
+            hits  = search_web(q_str, num=nb_results_per_query)
             for h in hits:
-                h["query_cat"] = q_cat
-                h["query_str"] = q_str
-            all_results.extend(hits)
-            prog.progress(5 + int((i + 1) / len(query_pairs) * 45))
-            time.sleep(0.08)
+                h["query_cat"]     = q_cat
+                h["query_gravity"] = q_grav
+                h["query_label"]   = q_label
+            all_results_with_meta.extend(hits)
+            prog.progress(5 + int((i+1)/len(QUERY_CATALOGUE)*55))
+            time.sleep(0.06)
 
-        # Deduplicate by URL but keep first occurrence (with its query_cat)
-        seen_urls, unique = set(), []
-        for r in all_results:
+        # Deduplicate by URL (keep first occurrence)
+        seen, unique = set(), []
+        for r in all_results_with_meta:
             u = r.get("url","")
-            if u and u not in seen_urls:
-                seen_urls.add(u)
-                unique.append(r)
-        all_results = unique
+            if u and u not in seen: seen.add(u); unique.append(r)
+        all_results_with_meta = unique
 
-        # STEP 3 — Deep scraping (priority: legal/press/review domains)
-        stat.markdown("📄 **[3/5]** Lecture approfondie des pages pertinentes...")
-        priority = ["trustpilot","infogreffe","bodacc","signal-arnaques","cybermalveillance",
-                    "pappers","societe.com","verif.com","amf-france","acpr","justice.fr",
-                    "lemonde","lefigaro","bfmtv","lesechos","latribune","reuters","bloomberg"]
-        sorted_r = sorted(all_results,
-            key=lambda r: 2 if any(p in r.get("url","") for p in priority) else 0,
-            reverse=True)
-        scraped, seen_dom = [], set()
-        for r in sorted_r[:40]:
-            dom = urlparse(r.get("url","")).netloc.replace("www.","")
-            if dom and dom not in seen_dom and len(scraped) < 12:
-                seen_dom.add(dom)
-                txt = scrape_page(r["url"], max_chars=2000)
-                if txt and len(txt) > 80:
-                    scraped.append(txt)
-        prog.progress(62)
-
-        # STEP 4 — IBAN
+        # STEP 3 — IBAN
+        stat.markdown("🏦 **[3/4]** Vérification IBAN…")
         iban_data, bank_data = {}, {}
         if linked_iban.strip():
             iban_data = validate_iban(linked_iban.strip())
             if iban_data.get("bank_code"):
                 b = db_get_bank_by_code(iban_data["bank_code"])
                 if b: bank_data = b
+        prog.progress(70)
 
-        # STEP 5 — Analysis
-        stat.markdown("🔍 **[4/5]** Analyse des signaux (filtre strict entité)...")
-        fl = st.session_state.get('filter_slider', 3)
-        analysis = analyze_local(entity_input.strip(), all_results, scraped, os_result, filter_level=fl)
-
-        # Optional Groq boost
-        gk = groq_key_tab.strip() or (api_key.strip() if api_key else "")
-        if gk:
-            stat.markdown("⚡ **[5/5]** Enrichissement LLM (Groq)...")
-            try:
-                gr = analyze_with_groq(entity_input.strip(), all_results[:30], scraped[:4], gk)
-                if gr and gr.get("score_risque",0) >= analysis.get("score_risque",0):
-                    gr["scores_categories"] = analysis.get("scores_categories",{})
-                    gr["nb_sources_filtrees"] = analysis.get("nb_sources_filtrees",0)
-                    gr["nb_sources_total"]    = analysis.get("nb_sources_total",0)
-                    gr["_moteur_label"] = "⚡ Groq llama-3.1 + filtrage strict"
-                    analysis = gr
-            except: pass
+        # STEP 4 — Analysis
+        stat.markdown("🔍 **[4/4]** Analyse et scoring…")
+        analysis = run_osint_analysis(entity, all_results_with_meta, [], os_result)
         prog.progress(90)
 
-        # Save
-        stat.markdown("💾 **[5/5]** Enregistrement...")
-        db_save_report(entity_input.strip(), entity_type,
-                       linked_iban or "",
-                       analysis.get("score_risque",0),
-                       analysis.get("niveau_risque",""),
-                       analysis.get("recommandation",""),
-                       analysis.get("resume_executif",""),
+        # Save to DB
+        db_save_report(entity, entity_type, linked_iban or "",
+                       analysis["score_risque"], analysis["niveau_risque"],
+                       analysis["recommandation"], analysis["resume_executif"],
                        json.dumps(analysis, ensure_ascii=False))
+
+        # Save to Excel history
+        try:
+            append_to_excel_history(entity, entity_type, analysis, os_result,
+                                     iban_data if iban_data.get("raw") else None)
+        except Exception as ex:
+            st.warning(f"Excel history : {ex}")
+
         if add_to_watch:
-            db_add_watchlist(entity_input.strip(), entity_type,
-                             "Screening auto", analysis.get("niveau_risque",""), "Auto")
+            db_add_watchlist(entity, entity_type, "Screening auto",
+                             analysis["niveau_risque"], "Auto")
 
-        # Persist in session
-        score  = analysis.get("score_risque", 0)
-        niveau = analysis.get("niveau_risque","FAIBLE")
-        reco   = analysis.get("recommandation","ACCEPTER")
-        neg_n  = analysis.get("negative_news",[])
-        has_risk = (
-            score >= 5
-            or os_result.get("found")
-            or analysis.get("sanctions",{}).get("trouve")
-            or analysis.get("litiges_judiciaires",{}).get("trouve")
-            or analysis.get("pep_exposure",{}).get("trouve")
-            or len(neg_n) >= 1
-            or niveau in ("MODERE","ELEVE","CRITIQUE")
-            or reco in ("VIGILANCE_RENFORCEE","REFUSER")
-        )
-        st.session_state["osint_analysis"]  = analysis
-        st.session_state["osint_entity"]    = entity_input.strip()
-        st.session_state["osint_iban_data"] = iban_data
-        st.session_state["osint_bank_data"] = bank_data
-        st.session_state["osint_os_result"] = os_result
-        st.session_state["osint_has_risk"]  = has_risk
-        st.session_state["osint_results"]   = all_results
+        # Persist
+        score, niveau, reco = (analysis["score_risque"], analysis["niveau_risque"],
+                                analysis["recommandation"])
+        has_risk = (score >= 5 or os_result.get("found")
+                    or analysis["sanctions"]["trouve"]
+                    or analysis["litiges_judiciaires"]["trouve"]
+                    or len(analysis["negative_news"]) >= 1
+                    or niveau in ("MODERE","ELEVE","CRITIQUE"))
+        st.session_state.update({
+            "osint_analysis":    analysis,
+            "osint_entity":      entity,
+            "osint_iban_data":   iban_data,
+            "osint_bank_data":   bank_data,
+            "osint_os_result":   os_result,
+            "osint_has_risk":    has_risk,
+            "osint_all_results": all_results_with_meta,
+        })
+        prog.progress(100); stat.empty()
 
-        prog.progress(100)
-        stat.empty()
-
-    # ── DISPLAY (from session state, persists after button click) ──
-    analysis  = st.session_state.get("osint_analysis")
-    entity_d  = st.session_state.get("osint_entity","")
-    iban_data = st.session_state.get("osint_iban_data",{})
-    bank_data = st.session_state.get("osint_bank_data",{})
-    os_result = st.session_state.get("osint_os_result",{})
-    has_risk  = st.session_state.get("osint_has_risk", False)
-    all_results = st.session_state.get("osint_results",[])
+    # ── DISPLAY ───────────────────────────────────────────────────
+    analysis    = st.session_state["osint_analysis"]
+    entity_d    = st.session_state["osint_entity"]
+    iban_data   = st.session_state["osint_iban_data"]
+    bank_data   = st.session_state["osint_bank_data"]
+    os_result   = st.session_state["osint_os_result"]
+    has_risk    = st.session_state["osint_has_risk"]
 
     if analysis:
         st.markdown("---")
-        score   = analysis.get("score_risque",0)
-        niveau  = analysis.get("niveau_risque","FAIBLE")
-        reco    = analysis.get("recommandation","ACCEPTER")
-        neg_n   = analysis.get("negative_news",[])
-        nb_filt = analysis.get("nb_sources_filtrees",0)
-        nb_tot  = analysis.get("nb_sources_total", len(all_results))
-        moteur  = analysis.get("_moteur_label", analysis.get("moteur","🔍 local strict v3"))
-        sc_cat  = analysis.get("scores_categories",{})
-        cat_str = "  ·  ".join(f"{k}:{v}" for k,v in sc_cat.items() if v > 0)
+        score  = analysis["score_risque"]
+        niveau = analysis["niveau_risque"]
+        reco   = analysis["recommandation"]
+        neg_n  = analysis["negative_news"]
+        nb_tot = analysis["nb_sources_total"]
+        nb_ent = analysis["nb_sources_filtrees"]
 
-        st.markdown(f"""<div style='background:rgba(0,212,255,0.04);border:1px solid #1e2535;
-        border-radius:4px;padding:7px 14px;margin:4px 0 10px;font-size:0.73rem;'>
-        <span style='color:#5a6a7a;'>Moteur :</span>
-        <b style='color:#00d4ff;font-family:IBM Plex Mono,monospace;'>{moteur}</b>
-        &nbsp;·&nbsp;<span style='color:#5a6a7a;'>{nb_tot} résultats bruts
-        → <b style='color:#c8d6e5;'>{nb_filt} mentionnant directement {entity_d}</b></span>
-        {"  ·  <span style='color:#5a6a7a;'>Signaux : "+cat_str+"</span>" if cat_str else ""}
-        </div>""", unsafe_allow_html=True)
-
-        # ── RAS ────────────────────────────────────────────────────
+        # ── RAS banner ────────────────────────────────────────────
         if not has_risk:
-            st.markdown(f"""
-            <div style='background:rgba(0,255,136,0.07);border:2px solid #00ff88;border-radius:8px;
-            padding:28px;margin:12px 0;text-align:center;'>
-              <div style='font-size:2.5rem;'>✅</div>
-              <div style='font-family:IBM Plex Mono,monospace;font-size:1.3rem;color:#00ff88;margin:10px 0;'>
-                RAS — AUCUN RISQUE DÉTECTÉ
-              </div>
-              <div style='color:#c8d6e5;font-size:0.95rem;'><b>{entity_d}</b></div>
-              <div style='color:#5a6a7a;font-size:0.8rem;margin-top:10px;'>
-                Score : {score}/100 · {nb_tot} sources interrogées · {nb_filt} mentions directes · Aucun signal négatif confirmé
-              </div>
+            st.markdown(f"""<div style='background:rgba(0,255,136,0.07);border:2px solid #00ff88;
+            border-radius:8px;padding:28px;text-align:center;'>
+            <div style='font-size:2.5rem;'>✅</div>
+            <div style='font-family:IBM Plex Mono,monospace;font-size:1.3rem;color:#00ff88;margin:10px 0;'>
+            RAS — AUCUN RISQUE DÉTECTÉ</div>
+            <div style='color:#c8d6e5;'><b>{entity_d}</b></div>
+            <div style='color:#5a6a7a;font-size:0.8rem;margin-top:10px;'>
+            Score : {score}/100 · {nb_tot} sources · {nb_ent} mentions directes</div>
             </div>""", unsafe_allow_html=True)
-            st.markdown(f"<div class='ok-box'>{analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='ok-box'>{analysis['resume_executif']}</div>", unsafe_allow_html=True)
 
-        # ── RISK DETECTED ─────────────────────────────────────────
         else:
+            # Score metrics
             bmap  = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}.get(niveau,"badge-medium")
             rc_c  = {"ACCEPTER":"#00ff88","VIGILANCE_RENFORCEE":"#ffcc00","REFUSER":"#ff3366"}.get(reco,"#5a6a7a")
-            sc_c  = "#ff3366" if os_result.get("found") or analysis.get("sanctions",{}).get("trouve") else "#00ff88"
-
             mc1,mc2,mc3,mc4 = st.columns(4)
-            with mc1:
-                st.markdown(f"<div class='metric-card'><div class='label'>Score</div><div class='value'>{score}<span style='font-size:0.8rem;color:#5a6a7a;'>/100</span></div></div>", unsafe_allow_html=True)
-            with mc2:
-                st.markdown(f"<div class='metric-card'><div class='label'>Niveau</div><div class='value' style='font-size:0.95rem;margin-top:8px;'><span class='{bmap}'>{niveau}</span></div></div>", unsafe_allow_html=True)
-            with mc3:
-                sc_t = f"🔴 {os_result.get('count',0)} hit(s) OS" if os_result.get("found") else ("⚠ Indicateurs" if analysis.get("sanctions",{}).get("trouve") else "✅ Aucune sanction")
-                st.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:0.8rem;color:{sc_c};'>{sc_t}</div></div>", unsafe_allow_html=True)
-            with mc4:
-                st.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.72rem;color:{rc_c};'>{reco}</div></div>", unsafe_allow_html=True)
+            mc1.markdown(f"<div class='metric-card'><div class='label'>Score</div><div class='value'>{score}<span style='font-size:0.8rem;color:#5a6a7a;'>/100</span></div></div>", unsafe_allow_html=True)
+            mc2.markdown(f"<div class='metric-card'><div class='label'>Niveau</div><div style='margin-top:12px;'><span class='{bmap}'>{niveau}</span></div></div>", unsafe_allow_html=True)
+            sc_t = f"🔴 {os_result.get('count',0)} hit(s)" if os_result.get("found") else "✅ Aucune sanction"
+            sc_c = "#ff3366" if os_result.get("found") else "#00ff88"
+            mc3.markdown(f"<div class='metric-card'><div class='label'>Sanctions</div><div class='value' style='font-size:0.8rem;color:{sc_c};'>{sc_t}</div></div>", unsafe_allow_html=True)
+            mc4.markdown(f"<div class='metric-card'><div class='label'>Recommandation</div><div class='value' style='font-size:0.72rem;color:{rc_c};'>{reco}</div></div>", unsafe_allow_html=True)
 
-            st.markdown(f"<div class='warn-box'><b>⚠ Résumé :</b> {analysis.get('resume_executif','')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='warn-box'><b>⚠ Résumé :</b> {analysis['resume_executif']}</div>", unsafe_allow_html=True)
 
             dl, dr = st.columns(2)
             with dl:
-                st.markdown("#### 📰 Signaux négatifs (entité confirmée)")
-                if neg_n:
-                    for n in neg_n[:15]:
-                        g   = n.get("gravite","").lower()
-                        cls = {"faible":"info-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"warn-box")
-                        url = n.get("url","")
-                        lnk = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.72rem;'>→ lire</a>" if url else ""
-                        kws = ", ".join(n.get("mots_cles",[])[:4])
-                        direct = " <span style='color:#00ff88;font-size:0.7rem;'>✓ entité mentionnée</span>" if n.get("entity_found") else " <span style='color:#ffcc00;font-size:0.7rem;'>⚠ vérifier pertinence</span>"
-                        snip = n.get("snippet","")[:120]
-                        st.markdown(f"""<div class='{cls}'>
-                        <b>{n.get('titre','')[:100]}</b>{lnk}{direct}<br>
-                        <small style='color:#5a6a7a;'>{n.get('source','')} · <b style='color:#c8d6e5;'>{n.get('nature','')}</b></small><br>
-                        <small style='color:#ffcc00;'>🔑 {kws}</small>
-                        {f"<br><small style='color:#5a6a7a;'>{snip}</small>" if snip else ""}
-                        </div>""", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='info-box'>Signaux faibles — vérification humaine recommandée.</div>", unsafe_allow_html=True)
-
-                lit = analysis.get("litiges_judiciaires",{})
-                st.markdown("#### ⚖️ Litiges")
-                if lit.get("trouve"):
-                    st.markdown(f"<div class='danger-box'>⚠️ {lit.get('details','')}</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<div class='ok-box'>Aucun litige identifié</div>", unsafe_allow_html=True)
+                st.markdown(f"#### 📰 Signaux détectés ({len(neg_n)})")
+                for n in neg_n[:15]:
+                    g   = n.get("gravite","").lower()
+                    cls = {"faible":"info-box","moyen":"warn-box","eleve":"danger-box"}.get(g,"warn-box")
+                    url = n.get("url","")
+                    lnk = f" <a href='{url}' target='_blank' style='color:#00d4ff;font-size:0.72rem;'>→ lire</a>" if url else ""
+                    kws = ", ".join(n.get("mots_cles",[])[:4])
+                    direct = " <span style='color:#00ff88;font-size:0.7rem;'>✓ direct</span>" if n.get("entity_found") else " <span style='color:#ffcc00;font-size:0.7rem;'>⚠ vérifier</span>"
+                    st.markdown(f"""<div class='{cls}'>
+                    <b>{n.get('titre','')[:100]}</b>{lnk}{direct}<br>
+                    <small style='color:#5a6a7a;'>{n.get('source','')} · <b style='color:#c8d6e5;'>{n.get('nature','')}</b></small><br>
+                    <small style='color:#ffcc00;'>🔑 {kws}</small>
+                    </div>""", unsafe_allow_html=True)
 
             with dr:
-                st.markdown("#### 🚨 Sanctions")
+                st.markdown("#### 🚨 Sanctions & PEP")
                 if os_result.get("found"):
                     st.markdown(f"<div class='danger-box'>🔴 {os_result['count']} entrée(s) OpenSanctions</div>", unsafe_allow_html=True)
                     for r in os_result.get("results",[])[:3]:
                         st.markdown(f"<div class='result-row'><b>{r.get('caption','')}</b> · {', '.join(r.get('datasets',[]))}</div>", unsafe_allow_html=True)
-                elif analysis.get("sanctions",{}).get("trouve"):
-                    st.markdown(f"<div class='warn-box'>⚠️ {analysis['sanctions']['details']}</div>", unsafe_allow_html=True)
                 else:
                     st.markdown("<div class='ok-box'>Absent des listes de sanctions</div>", unsafe_allow_html=True)
-
                 pep = analysis.get("pep_exposure",{})
-                st.markdown("#### 👤 PEP & Réputation")
                 if pep.get("trouve"):
-                    st.markdown(f"<div class='warn-box'>{pep.get('details','')}</div>", unsafe_allow_html=True)
-                rep = analysis.get("reputation_notations","")
-                if rep:
-                    c = "warn-box" if "dégradée" in rep else "ok-box"
-                    st.markdown(f"<div class='{c}'>⭐ {rep}</div>", unsafe_allow_html=True)
-
-            fa1, fa2 = st.columns(2)
-            with fa1:
+                    st.markdown(f"<div class='warn-box'>⚠️ Indicateurs PEP détectés</div>", unsafe_allow_html=True)
                 for f in analysis.get("facteurs_aggravants",[]):
                     st.markdown(f"<div class='danger-box'>🔺 {f}</div>", unsafe_allow_html=True)
-            with fa2:
                 for f in analysis.get("facteurs_attenuants",[]):
                     st.markdown(f"<div class='ok-box'>🔻 {f}</div>", unsafe_allow_html=True)
 
-            with st.expander(f"📋 Sources brutes ({len(all_results)} résultats · {nb_filt} filtrés)"):
-                for r in all_results[:50]:
-                    dom  = urlparse(r.get("url","")).netloc
-                    txt  = (r.get("title","") + " " + r.get("snippet","")).lower()
-                    risk_kw = any(kw in txt for cat in ["fraud","sanctions","judicial"]
-                                  for kw in RISK_KEYWORDS.get(cat,{}).keys())
-                    bdr = "border-left:3px solid #ff3366;" if risk_kw else ""
-                    st.markdown(f"""<div class='result-row' style='{bdr}'>
-                    <a href='{r.get("url","")}' target='_blank' style='color:#00d4ff;text-decoration:none;'><b>{r.get("title","")[:100]}</b></a><br>
-                    <small style='color:#5a6a7a;'>{dom}</small>
-                    <small> · {r.get("snippet","")[:130]}</small>
-                    </div>""", unsafe_allow_html=True)
-
-        # ── ALL ARTICLES FOR HUMAN REVIEW ────────────────────────
-        st.markdown("---")
-        all_art = analysis.get("all_articles", [])
-        with st.expander(f"📋 Liste complète pour revue humaine — {len(all_art)} articles collectés ({nb_filt} mentionnant directement l entité)", expanded=False):
-            st.markdown("""<div class='info-box'>
-            <b>Revue humaine requise.</b> Consultez chaque article, identifiez les informations négatives,
-            puis utilisez la zone de validation ci-dessous pour documenter votre décision.
-            La colonne <b>Entité ✓</b> indique si le nom recherché apparaît dans l article.
-            </div>""", unsafe_allow_html=True)
-            # Split into two lists: entity-mentioned vs generic
-            art_entity  = [a for a in all_art if a.get("entity_mentioned")]
-            art_generic = [a for a in all_art if not a.get("entity_mentioned")]
-
-            st.markdown(f"**Articles mentionnant directement {entity_d} ({len(art_entity)})**")
-            for a in art_entity:
+        # All articles
+        all_art = analysis.get("all_articles",[])
+        with st.expander(f"📋 Toutes les sources collectées ({len(all_art)} articles)"):
+            art_direct  = [a for a in all_art if a.get("entity_mentioned")]
+            art_other   = [a for a in all_art if not a.get("entity_mentioned")]
+            st.markdown(f"**Mentions directes de '{entity_d}' ({len(art_direct)})**")
+            for a in art_direct:
                 url = a.get("url","")
-                link = f"<a href='{url}' target='_blank' style='color:#00d4ff;'>→ lire</a>" if url else ""
+                lnk = f"<a href='{url}' target='_blank' style='color:#00d4ff;'>→ lire</a>" if url else ""
                 st.markdown(f"""<div class='result-row' style='border-left:3px solid #00d4ff;'>
-                <b>{a.get("title","")[:100]}</b> {link}<br>
-                <small style='color:#5a6a7a;'>{a.get("domain","")} · {a.get("snippet","")[:120]}</small>
+                <b>{a.get('title','')[:100]}</b> {lnk}<br>
+                <small style='color:#5a6a7a;'>{a.get('domain','')} · {a.get('query_label','')} · {a.get('snippet','')[:120]}</small>
                 </div>""", unsafe_allow_html=True)
-
-            if art_generic:
-                st.markdown(f"**Autres articles (sans mention directe — {len(art_generic)})**")
-                for a in art_generic[:20]:
+            if art_other:
+                st.markdown(f"**Autres articles ({len(art_other)})**")
+                for a in art_other[:30]:
                     url = a.get("url","")
-                    link = f"<a href='{url}' target='_blank' style='color:#5a6a7a;'>→ lire</a>" if url else ""
+                    lnk = f"<a href='{url}' target='_blank' style='color:#5a6a7a;'>→ lire</a>" if url else ""
                     st.markdown(f"""<div class='result-row'>
-                    <span style='color:#5a6a7a;'>{a.get("title","")[:100]}</span> {link}
+                    <span style='color:#5a6a7a;'>{a.get('title','')[:100]}</span> {lnk}
                     </div>""", unsafe_allow_html=True)
 
-        # ── HUMAN VALIDATION SECTION ──────────────────────────────
+        # ── HUMAN VALIDATION ──────────────────────────────────────
         st.markdown("---")
-        st.markdown("""<div class='section-title'>✍️ VALIDATION HUMAINE</div>""", unsafe_allow_html=True)
-        st.markdown("""<div class='info-box'>
-        Après avoir examiné les articles ci-dessus, renseignez votre décision.
-        Le rapport PDF sera daté et horodaté avec votre validation.
-        </div>""", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>✍️ VALIDATION HUMAINE</div>", unsafe_allow_html=True)
+        st.markdown("<div class='info-box'>Après examen des articles, renseignez votre décision. Le rapport PDF et l'historique Excel seront horodatés avec votre validation.</div>", unsafe_allow_html=True)
 
-        vh1, vh2 = st.columns([1, 2])
+        vh1, vh2 = st.columns([1,2])
         with vh1:
-            analyst_name = st.text_input("👤 Nom de l analyste", placeholder="ex: Marie Dupont",
-                                          key="analyst_name")
-            human_decision = st.radio(
+            analyst_name = st.text_input("👤 Nom de l'analyste", placeholder="ex: Marie Dupont", key="analyst_name")
+            human_decision_raw = st.radio(
                 "Décision après analyse",
                 ["En attente", "✅ RAS — Rien à signaler", "⚠️ Informations négatives confirmées"],
-                key="human_decision",
-                help="RAS : aucun risque après vérification humaine | Négatif : les signaux sont avérés"
-            )
+                key="human_decision")
         with vh2:
-            human_comment = st.text_area(
-                "Commentaire de l analyste",
-                placeholder="Ex: RAS apres verification (homonyme). Ou: Condamnation confirmee tribunal Paris 2022, article consulte.",
-                height=120,
-                key="human_comment"
-            )
+            human_comment = st.text_area("Commentaire", placeholder="ex: RAS — homonyme identifié.", height=110, key="human_comment")
 
-        # Map radio to decision code
-        decision_map = {
-            "En attente": None,
-            "✅ RAS — Rien à signaler": "RAS",
-            "⚠️ Informations négatives confirmées": "RISQUE_CONFIRME"
-        }
-        h_decision = decision_map.get(human_decision, None)
+        decision_map = {"En attente":None, "✅ RAS — Rien à signaler":"RAS",
+                        "⚠️ Informations négatives confirmées":"RISQUE_CONFIRME"}
+        h_decision = decision_map.get(human_decision_raw, None)
 
-        # PDF Generation
+        # PDF + Excel buttons
         st.markdown("")
-        pdf_c1, pdf_c2 = st.columns([1, 2])
-        with pdf_c1:
-            if h_decision is None:
-                btn_lbl = "⬇ GÉNÉRER RAPPORT (en attente)"
-            elif h_decision == "RAS":
-                btn_lbl = "⬇ GÉNÉRER RAPPORT PDF — RAS ✅"
-            else:
-                btn_lbl = "⬇ GÉNÉRER RAPPORT PDF — RISQUE ⚠️"
+        pdf_c1, pdf_c2, pdf_c3 = st.columns(3)
 
-            if st.button(btn_lbl, key="gen_pdf_main"):
-                with st.spinner("Génération du rapport PDF..."):
+        with pdf_c1:
+            if st.button("⬇ GÉNÉRER RAPPORT PDF OSINT", key="gen_pdf_main"):
+                with st.spinner("Génération du PDF…"):
                     try:
-                        pdf_bytes = generate_pdf_report(
-                            entity_d,
-                            iban_data,
-                            bank_data,
-                            os_result,
-                            analysis,
+                        pdf_bytes = generate_osint_pdf(
+                            entity_d, analysis, os_result,
+                            iban_data if iban_data.get("raw") else None,
+                            bank_data if bank_data else None,
                             human_decision=h_decision,
                             human_comment=human_comment,
                             analyst_name=analyst_name
                         )
-                        suffix = "RAS" if h_decision == "RAS" else ("RISQUE" if h_decision else "ATTENTE")
-                        fname  = f"FinShield_{entity_d.replace(' ','_')}_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                        st.download_button(
-                            label="📥 Télécharger le rapport PDF",
-                            data=pdf_bytes,
-                            file_name=fname,
-                            mime="application/pdf",
-                            key="dl_pdf_main"
-                        )
-                        if h_decision == "RAS":
-                            st.markdown("<div class='ok-box'>✅ Rapport RAS généré et daté.</div>", unsafe_allow_html=True)
-                        elif h_decision == "RISQUE_CONFIRME":
-                            st.markdown("<div class='danger-box'>⚠️ Rapport RISQUE CONFIRMÉ généré.</div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown("<div class='warn-box'>⏳ Rapport généré — validation en attente.</div>", unsafe_allow_html=True)
+                        suffix = {"RAS":"RAS","RISQUE_CONFIRME":"RISQUE"}.get(h_decision,"ATTENTE")
+                        fname  = f"FinShield_OSINT_{entity_d.replace(' ','_')}_{suffix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                        st.download_button("📥 Télécharger PDF", data=pdf_bytes,
+                                           file_name=fname, mime="application/pdf",
+                                           key="dl_pdf_main")
+                        st.markdown(f"<div class='ok-box'>✅ Rapport PDF généré.</div>", unsafe_allow_html=True)
                     except Exception as e:
-                        st.error(f"Erreur PDF : {e}")
                         import traceback
+                        st.error(f"Erreur PDF : {e}")
                         st.code(traceback.format_exc())
 
         with pdf_c2:
-            decision_display = {
-                None:              ("⏳ En attente","#5a6a7a"),
-                "RAS":             ("✅ RAS — Rien à signaler","#00ff88"),
-                "RISQUE_CONFIRME": ("⚠️ Risque confirmé","#ff3366"),
-            }
-            d_label, d_color = decision_display.get(h_decision, ("—","#5a6a7a"))
-            st.markdown(f"""<div class='metric-card'>
-            <div class='label'>Contenu du rapport</div>
-            <div class='sub' style='margin-top:6px;line-height:1.9;'>
-            Score {score}/100 · {niveau} · {reco}<br>
-            {len(neg_n)} signal(aux) · {nb_tot} sources · {nb_filt} mentions directes<br>
-            IBAN {" ✓" if iban_data.get("raw") else "—"} · {len(all_art)} articles listés<br>
-            <b style='color:{d_color};'>{d_label}</b>
-            {"<br><span style='color:#5a6a7a;font-size:0.78rem;'>" + (analyst_name or "Analyste non renseigné") + "</span>" if h_decision else ""}
-            </div></div>""", unsafe_allow_html=True)
+            if st.button("📊 METTRE À JOUR EXCEL (avec validation)", key="update_excel"):
+                try:
+                    xl_path = append_to_excel_history(
+                        entity_d, entity_type, analysis, os_result,
+                        iban_data if iban_data.get("raw") else None,
+                        analyst_name=analyst_name, human_decision=h_decision)
+                    with open(xl_path, "rb") as f:
+                        st.download_button("📥 Télécharger Excel", data=f.read(),
+                                           file_name="finshield_history.xlsx",
+                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                           key="dl_excel_main")
+                    st.markdown("<div class='ok-box'>✅ Historique Excel mis à jour.</div>", unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Erreur Excel : {e}")
+
+        with pdf_c3:
+            if os.path.exists(EXCEL_HISTORY_PATH):
+                with open(EXCEL_HISTORY_PATH, "rb") as f:
+                    st.download_button("📥 Télécharger l'historique Excel complet",
+                                       data=f.read(),
+                                       file_name="finshield_history.xlsx",
+                                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                       key="dl_excel_full")
 
 
-# ══════════════════════════════════════════════════════════════════
-# TAB 3 — BANK SEARCH
-# ══════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────
+# § 10  TAB 3 — BANK SEARCH
+# ─────────────────────────────────────────────────────────────────
 with tab3:
     st.markdown("## Recherche de Banque")
-    st.markdown("<div class='info-box'>Recherche par code CIB, nom, BIC ou ville. Base persistante enrichissable depuis l'onglet Gestion.</div>", unsafe_allow_html=True)
-
+    st.markdown("<div class='info-box'>Recherche par code CIB, nom, BIC ou ville.</div>", unsafe_allow_html=True)
     sc1, sc2 = st.columns([3,1])
     with sc1:
-        bq = st.text_input("Code CIB, nom, BIC…", placeholder="30004 · BNP · BNPAFRPP · Paris", key="bsearch")
+        bq = st.text_input("Code CIB, nom, BIC…", placeholder="30004 · BNP · BNPAFRPP", key="bsearch")
     with sc2:
         st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
         do_search = st.button("▶ RECHERCHER", key="btn_bsearch")
-
     if do_search and bq:
         hits = db_get_banks(bq)
         st.markdown(f"<div class='info-box'>{len(hits)} résultat(s)</div>", unsafe_allow_html=True)
         for b in hits[:20]:
             bic_str = f" · BIC : <code>{b['bic']}</code>" if b.get("bic") else ""
-            st.markdown(f"""
-            <div class='metric-card'>
-              <div style='display:flex;justify-content:space-between;'>
-                <div>
-                  <span style='font-family:IBM Plex Mono,monospace;color:#00d4ff;font-size:1.1rem;'>{b['code']}</span>
-                  {bic_str}
-                </div>
-                <span class='badge-low'>{b.get('type','')}</span>
-              </div>
-              <div style='font-size:0.95rem;color:#c8d6e5;margin-top:6px;'><b>{b['name']}</b></div>
-              <div style='font-size:0.8rem;color:#5a6a7a;margin-top:2px;'>{b.get('address','')} · {b.get('city','')} {b.get('postal_code','')} · {b.get('country','')}</div>
-              {'<div style="font-size:0.78rem;color:#5a6a7a;margin-top:4px;">'+b['notes']+'</div>' if b.get('notes') else ''}
+            st.markdown(f"""<div class='metric-card'>
+            <span style='font-family:IBM Plex Mono,monospace;color:#00d4ff;'>{b['code']}</span>{bic_str}
+            <div style='font-size:0.95rem;color:#c8d6e5;margin-top:6px;'><b>{b['name']}</b></div>
+            <div style='font-size:0.8rem;color:#5a6a7a;'>{b.get('city','')} {b.get('postal_code','')} · {b.get('country','')}</div>
             </div>""", unsafe_allow_html=True)
-
-    # Full table
-    with st.expander("📖 Table complète (toutes les banques)"):
-        flt = st.text_input("Filtrer la table", key="full_bflt").lower()
+    with st.expander("📖 Table complète"):
+        flt = st.text_input("Filtrer", key="full_bflt").lower()
         rows = db_get_banks(flt)
         if rows:
-            df = pd.DataFrame(rows)[["code","name","bic","type","city","postal_code","country"]]
-            df.columns = ["Code CIB","Banque","BIC","Type","Ville","CP","Pays"]
+            df = pd.DataFrame(rows)[["code","name","bic","type","city","country"]]
+            df.columns = ["Code CIB","Banque","BIC","Type","Ville","Pays"]
             st.dataframe(df, use_container_width=True, height=450)
 
-# ══════════════════════════════════════════════════════════════════
-# TAB 4 — DATABASE MANAGEMENT
-# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# § 11  TAB 4 — DATABASE MANAGEMENT
+# ─────────────────────────────────────────────────────────────────
 with tab4:
     st.markdown("## Gestion de la Base de Données")
-
     db_tab1, db_tab2, db_tab3 = st.tabs(["🏦 Banques", "🌍 Pays IBAN", "📤 Import / Export"])
 
-    # ── Sub-tab: Banks ─────────────────────────────────────────────
     with db_tab1:
         st.markdown("### Ajouter / Modifier une banque")
-        st.markdown("<div class='info-box'>Renseignez le code CIB à 5 chiffres. Si le code existe déjà, les données seront mises à jour.</div>", unsafe_allow_html=True)
-
         with st.form("form_bank"):
-            fc1, fc2, fc3 = st.columns(3)
+            fc1,fc2,fc3 = st.columns(3)
             with fc1:
-                f_code = st.text_input("Code CIB *", placeholder="30004")
-                f_name = st.text_input("Nom de la banque *", placeholder="BNP Paribas")
-                f_bic  = st.text_input("Code BIC / SWIFT", placeholder="BNPAFRPP")
+                f_code = st.text_input("Code CIB *"); f_name = st.text_input("Nom *")
+                f_bic  = st.text_input("BIC / SWIFT")
             with fc2:
-                f_addr = st.text_input("Adresse", placeholder="16 Boulevard des Italiens")
-                f_city = st.text_input("Ville", placeholder="Paris")
-                f_cp   = st.text_input("Code postal", placeholder="75009")
+                f_addr = st.text_input("Adresse"); f_city = st.text_input("Ville")
+                f_cp   = st.text_input("Code postal")
             with fc3:
-                f_country = st.selectbox("Pays", ["FR","BE","LU","MC","CH","DE","GB","ES","IT","NL","PT","AT","SE","NO","DK","FI","IE","PL","CZ","SK","HU","RO","BG","HR","GR","SI","LT","LV","EE","MT","CY","IS","LI","SM","TR","MA","TN","DZ","AE","SA","MU","AL","AD","Other"])
-                f_type = st.selectbox("Type", ["Etablissement de crédit","Banque centrale","Autre institution","Fonds de marché monétaire","Organisme de paiement"])
-                f_notes = st.text_area("Notes / Remarques", height=68)
-            submitted = st.form_submit_button("💾 ENREGISTRER")
-            if submitted:
+                f_country = st.selectbox("Pays", ["FR","BE","LU","MC","CH","DE","GB","ES","IT","NL","PT","Other"])
+                f_type    = st.selectbox("Type", ["Etablissement de crédit","Banque centrale","Autre institution"])
+                f_notes   = st.text_area("Notes", height=68)
+            if st.form_submit_button("💾 ENREGISTRER"):
                 if f_code and f_name:
-                    db_upsert_bank(f_code.strip(), f_name.strip(), f_addr.strip(),
-                                   f_city.strip(), f_cp.strip(), f_country,
-                                   f_bic.strip().upper(), f_type, f_notes.strip())
+                    db_upsert_bank(f_code.strip(),f_name.strip(),f_addr.strip(),
+                                   f_city.strip(),f_cp.strip(),f_country,
+                                   f_bic.strip().upper(),f_type,f_notes.strip())
                     st.success(f"✅ Banque '{f_name}' (code {f_code}) enregistrée.")
                     st.rerun()
-                else:
-                    st.error("Le code CIB et le nom sont obligatoires.")
+                else: st.error("Code CIB et nom obligatoires.")
 
-        st.markdown("### Banques enregistrées")
-        filter_banks = st.text_input("Rechercher dans la liste", key="db_bank_flt")
-        banks_list = db_get_banks(filter_banks)
-
-        for b in banks_list[:100]:
+        filter_banks = st.text_input("Filtrer la liste", key="db_bank_flt")
+        for b in db_get_banks(filter_banks)[:100]:
             col_b1, col_b2 = st.columns([5,1])
             with col_b1:
-                bic_d = f" · {b['bic']}" if b.get("bic") else ""
-                st.markdown(f"""
-                <div class='result-row'>
-                  <b style='color:#00d4ff;'>{b['code']}</b>{bic_d} · {b['name']}
-                  <span style='color:#5a6a7a;font-size:0.8rem;'> · {b.get('city','')} {b.get('postal_code','')} · {b.get('country','')}</span><br>
-                  <small style='color:#5a6a7a;'>{b.get('type','')} {' · '+b['notes'] if b.get('notes') else ''}</small>
+                st.markdown(f"""<div class='result-row'>
+                <b style='color:#00d4ff;'>{b['code']}</b>{"  ·  "+b['bic'] if b.get('bic') else ""} · {b['name']}
+                <span style='color:#5a6a7a;font-size:0.8rem;'> · {b.get('city','')} · {b.get('type','')}</span>
                 </div>""", unsafe_allow_html=True)
             with col_b2:
-                if st.button(f"🗑 Supprimer", key=f"del_bank_{b['code']}"):
-                    db_delete_bank(b["code"])
-                    st.rerun()
+                if st.button(f"🗑", key=f"del_{b['code']}"):
+                    db_delete_bank(b["code"]); st.rerun()
 
-    # ── Sub-tab: IBAN Countries ────────────────────────────────────
     with db_tab2:
-        st.markdown("### Ajouter / Modifier une structure IBAN par pays")
-        st.markdown("<div class='info-box'>Basé sur la norme ISO 13616. Le document BCEE fourni couvre les principaux pays européens.</div>", unsafe_allow_html=True)
-
+        st.markdown("### Ajouter / Modifier un pays IBAN")
         with st.form("form_iban_country"):
-            ic1, ic2, ic3 = st.columns(3)
+            ic1,ic2,ic3 = st.columns(3)
             with ic1:
-                ic_code   = st.text_input("Code ISO pays *", placeholder="FR", max_chars=2)
-                ic_name   = st.text_input("Nom du pays *", placeholder="France")
-                ic_length = st.number_input("Longueur IBAN *", min_value=15, max_value=34, value=27)
+                ic_code=st.text_input("Code ISO *",max_chars=2); ic_name=st.text_input("Nom *")
+                ic_length=st.number_input("Longueur *",min_value=15,max_value=34,value=27)
             with ic2:
-                ic_bban   = st.text_input("Format BBAN", placeholder="5n,5n,11c,2n")
-                ic_struct = st.text_input("Structure lisible", placeholder="FRkk bbbb bggg ggcc cccc cccc cxx")
+                ic_bban=st.text_input("Format BBAN"); ic_struct=st.text_input("Structure")
             with ic3:
-                ic_example = st.text_input("Exemple IBAN", placeholder="FR76 3000 4000 0000 0000 0000 000")
-                ic_notes   = st.text_area("Notes", height=68)
-            ic_sub = st.form_submit_button("💾 ENREGISTRER")
-            if ic_sub:
+                ic_example=st.text_input("Exemple IBAN"); ic_notes=st.text_area("Notes",height=68)
+            if st.form_submit_button("💾 ENREGISTRER"):
                 if ic_code and ic_name:
-                    db_upsert_iban_country(ic_code.upper(), ic_name, ic_length,
-                                           ic_struct, ic_example, ic_bban, ic_notes)
-                    st.success(f"✅ Pays {ic_code.upper()} — {ic_name} enregistré.")
-                    st.rerun()
-                else:
-                    st.error("Code et nom obligatoires.")
-
-        st.markdown("### Référentiel IBAN actuel")
-        all_ic = db_get_all_iban_countries()
-        df_ic = pd.DataFrame(all_ic)[["code","name","length","bban_format","example"]]
+                    db_upsert_iban_country(ic_code.upper(),ic_name,ic_length,ic_struct,ic_example,ic_bban,ic_notes)
+                    st.success(f"✅ {ic_code.upper()} — {ic_name} enregistré."); st.rerun()
+                else: st.error("Code et nom obligatoires.")
+        df_ic = pd.DataFrame(db_get_all_iban_countries())[["code","name","length","bban_format","example"]]
         df_ic.columns = ["Code","Pays","Longueur","Format BBAN","Exemple"]
-        st.dataframe(df_ic, use_container_width=True, height=500)
+        st.dataframe(df_ic, use_container_width=True, height=400)
 
-    # ── Sub-tab: Import / Export ────────────────────────────────────
     with db_tab3:
-        st.markdown("### Export de la base")
-
-        exp1, exp2 = st.columns(2)
+        exp1,exp2 = st.columns(2)
         with exp1:
-            st.markdown("#### 📤 Exporter les banques (CSV)")
+            st.markdown("#### 📤 Export banques (CSV)")
             banks_all = db_get_banks()
             if banks_all:
-                csv_buf = io.StringIO()
-                writer = csv.DictWriter(csv_buf, fieldnames=banks_all[0].keys())
-                writer.writeheader()
-                writer.writerows(banks_all)
-                st.download_button("⬇ Télécharger banks.csv",
-                                   data=csv_buf.getvalue().encode("utf-8"),
+                buf2 = io.StringIO()
+                csv.DictWriter(buf2, fieldnames=banks_all[0].keys()).writeheader()
+                csv.DictWriter(buf2, fieldnames=banks_all[0].keys()).writerows(banks_all)
+                st.download_button("⬇ banks.csv", data=buf2.getvalue().encode(),
                                    file_name="finshield_banks.csv", mime="text/csv")
-
-            st.markdown("#### 📤 Exporter pays IBAN (CSV)")
-            ic_all = db_get_all_iban_countries()
-            if ic_all:
-                csv_buf2 = io.StringIO()
-                writer2 = csv.DictWriter(csv_buf2, fieldnames=ic_all[0].keys())
-                writer2.writeheader()
-                writer2.writerows(ic_all)
-                st.download_button("⬇ Télécharger iban_countries.csv",
-                                   data=csv_buf2.getvalue().encode("utf-8"),
-                                   file_name="finshield_iban_countries.csv", mime="text/csv")
-
         with exp2:
-            st.markdown("#### 📥 Importer des banques (CSV)")
-            st.markdown("""<div class='info-box'>
-            Format attendu : colonnes <code>code, name, address, city, postal_code, country, bic, type, notes</code>
-            </div>""", unsafe_allow_html=True)
-            uploaded = st.file_uploader("Choisir un fichier CSV", type=["csv"], key="import_banks")
+            st.markdown("#### 📥 Import banques (CSV)")
+            uploaded = st.file_uploader("CSV (colonnes: code, name, …)", type=["csv"], key="import_banks")
             if uploaded:
                 try:
                     df_up = pd.read_csv(uploaded)
-                    # Normalize columns
                     df_up.columns = [c.lower().strip() for c in df_up.columns]
-                    required = ["code","name"]
-                    if all(r in df_up.columns for r in required):
+                    if "code" in df_up.columns and "name" in df_up.columns:
                         st.dataframe(df_up.head(), use_container_width=True)
                         if st.button("✅ Confirmer l'import"):
-                            count = 0
                             for _, row in df_up.iterrows():
-                                db_upsert_bank(
-                                    str(row.get("code","")).strip(),
-                                    str(row.get("name","")).strip(),
-                                    str(row.get("address","")).strip(),
-                                    str(row.get("city","")).strip(),
-                                    str(row.get("postal_code","")).strip(),
-                                    str(row.get("country","FR")).strip(),
-                                    str(row.get("bic","")).strip().upper(),
-                                    str(row.get("type","Etablissement de crédit")).strip(),
-                                    str(row.get("notes","")).strip()
-                                )
-                                count += 1
-                            st.success(f"✅ {count} banques importées/mises à jour.")
-                            st.rerun()
-                    else:
-                        st.error(f"Colonnes manquantes. Attendu: code, name. Trouvé: {list(df_up.columns)}")
-                except Exception as e:
-                    st.error(f"Erreur lecture CSV : {e}")
+                                db_upsert_bank(str(row.get("code","")).strip(),
+                                               str(row.get("name","")).strip(),
+                                               str(row.get("address","")).strip(),
+                                               str(row.get("city","")).strip(),
+                                               str(row.get("postal_code","")).strip(),
+                                               str(row.get("country","FR")).strip(),
+                                               str(row.get("bic","")).strip().upper(),
+                                               str(row.get("type","Etablissement de crédit")).strip(),
+                                               str(row.get("notes","")).strip())
+                            st.success(f"✅ {len(df_up)} banques importées."); st.rerun()
+                    else: st.error("Colonnes 'code' et 'name' requises.")
+                except Exception as e: st.error(f"Erreur : {e}")
 
         st.markdown("---")
-        st.markdown("### ⚠️ Zone de réinitialisation")
-        with st.expander("Réinitialiser les données (irréversible)"):
-            st.markdown("<div class='danger-box'>Ces actions suppriment définitivement les données.</div>", unsafe_allow_html=True)
-            cr1, cr2, cr3 = st.columns(3)
+        with st.expander("⚠️ Réinitialisation"):
+            cr1,cr2,cr3 = st.columns(3)
             with cr1:
-                if st.button("🗑 Vider l'historique rapports"):
-                    conn = get_db(); conn.execute("DELETE FROM osint_reports"); conn.commit(); conn.close()
-                    st.success("Historique vidé."); st.rerun()
+                if st.button("🗑 Vider l'historique"):
+                    conn=get_db(); conn.execute("DELETE FROM osint_reports"); conn.commit(); conn.close()
+                    st.success("Vidé."); st.rerun()
             with cr2:
                 if st.button("🗑 Vider la watchlist"):
-                    conn = get_db(); conn.execute("DELETE FROM watchlist"); conn.commit(); conn.close()
-                    st.success("Watchlist vidée."); st.rerun()
+                    conn=get_db(); conn.execute("DELETE FROM watchlist"); conn.commit(); conn.close()
+                    st.success("Vidée."); st.rerun()
             with cr3:
-                if st.button("🔄 Réensemencer banques par défaut"):
-                    conn = get_db(); conn.execute("DELETE FROM banks"); conn.commit(); conn.close()
-                    seed_banks()
-                    st.success("Banques réinitialisées."); st.rerun()
+                if st.button("🔄 Réensemencer banques"):
+                    conn=get_db(); conn.execute("DELETE FROM banks"); conn.commit(); conn.close()
+                    seed_banks(); st.success("Réinitialisé."); st.rerun()
 
-# ══════════════════════════════════════════════════════════════════
-# TAB 5 — HISTORY & WATCHLIST
-# ══════════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────────
+# § 12  TAB 5 — HISTORY & WATCHLIST
+# ─────────────────────────────────────────────────────────────────
 with tab5:
     st.markdown("## Historique & Surveillance")
-
-    ht1, ht2 = st.tabs(["📋 Historique des rapports", "👁 Liste de surveillance"])
+    ht1, ht2, ht3 = st.tabs(["📋 Rapports", "👁 Watchlist", "📊 Excel Historique"])
 
     with ht1:
         reports = db_get_reports(100)
         if reports:
-            st.markdown(f"<div class='info-box'>{len(reports)} rapport(s) enregistré(s)</div>", unsafe_allow_html=True)
-            # Summary table
             df_rep = pd.DataFrame(reports)[["id","entity","entity_type","score","niveau","recommandation","created_at"]]
             df_rep.columns = ["ID","Entité","Type","Score","Niveau","Recommandation","Date"]
             st.dataframe(df_rep, use_container_width=True, height=300)
-
-            # Detail view
-            report_ids = [r["id"] for r in reports]
-            sel = st.selectbox("Voir le détail d'un rapport", ["—"] + [f"#{r['id']} — {r['entity']} ({r['created_at'][:10]})" for r in reports])
+            sel = st.selectbox("Voir le détail", ["—"] + [f"#{r['id']} — {r['entity']} ({r['created_at'][:10]})" for r in reports])
             if sel != "—":
                 idx = int(sel.split("—")[0].replace("#","").strip()) - 1
                 rep = reports[idx]
-                st.markdown(f"""
-                <div class='metric-card'>
-                  <div class='label'>Entité</div>
-                  <div class='value' style='font-size:1rem;'>{rep['entity']}</div>
-                  <div class='sub'>Score : {rep['score']}/100 · Niveau : {rep['niveau']} · {rep['recommandation']}</div>
-                  <div class='sub'>{rep['resume']}</div>
-                </div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class='metric-card'>
+                <div class='label'>Entité</div><div class='value' style='font-size:1rem;'>{rep['entity']}</div>
+                <div class='sub'>Score {rep['score']}/100 · {rep['niveau']} · {rep['recommandation']}</div>
+                <div class='sub'>{rep['resume']}</div></div>""", unsafe_allow_html=True)
                 if rep.get("full_json"):
                     with st.expander("JSON complet"):
-                        try:
-                            st.json(json.loads(rep["full_json"]))
-                        except:
-                            st.text(rep["full_json"])
-
-                # Re-generate PDF from stored report
-                if st.button("⬇ Régénérer le PDF", key=f"repdf_{rep['id']}"):
+                        try: st.json(json.loads(rep["full_json"]))
+                        except: st.text(rep["full_json"])
+                if st.button("⬇ Régénérer PDF", key=f"repdf_{rep['id']}"):
                     try:
                         analysis = json.loads(rep.get("full_json","{}"))
-                        iban_data = validate_iban(rep.get("iban","")) if rep.get("iban") else {}
-                        bank_data = {}
-                        if iban_data.get("bank_code"):
-                            b = db_get_bank_by_code(iban_data["bank_code"])
-                            if b: bank_data = b
-                        pdf = generate_pdf_report(rep["entity"], iban_data, bank_data, {"count":0,"results":[]}, analysis)
-                        fname = f"FinShield_{rep['entity'].replace(' ','_')}_{rep['created_at'][:10]}.pdf"
-                        st.download_button("📥 Télécharger", data=pdf, file_name=fname, mime="application/pdf")
-                    except Exception as e:
-                        st.error(f"Erreur : {e}")
+                        pdf = generate_osint_pdf(rep["entity"], analysis,
+                                                  analysis.get("os_result",{"count":0,"results":[]}))
+                        st.download_button("📥 Télécharger",data=pdf,
+                            file_name=f"FinShield_{rep['entity'].replace(' ','_')}_{rep['created_at'][:10]}.pdf",
+                            mime="application/pdf")
+                    except Exception as e: st.error(f"Erreur : {e}")
         else:
-            st.markdown("<div class='info-box'>Aucun rapport enregistré. Lancez une analyse dans l'onglet OSINT.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='info-box'>Aucun rapport. Lancez une analyse OSINT.</div>", unsafe_allow_html=True)
 
     with ht2:
-        st.markdown("### Ajouter une entité à surveiller")
+        st.markdown("### Ajouter une entité")
         with st.form("form_watch"):
-            wc1, wc2 = st.columns(2)
+            wc1,wc2 = st.columns(2)
             with wc1:
-                w_entity = st.text_input("Entité *")
-                w_type   = st.selectbox("Type", ["Entreprise","Personne physique","Groupe","Autre"])
+                w_entity=st.text_input("Entité *"); w_type=st.selectbox("Type",["Entreprise","Personne","Autre"])
             with wc2:
-                w_reason = st.text_area("Motif de surveillance", height=68)
-                w_risk   = st.selectbox("Niveau de risque", ["FAIBLE","MODERE","ELEVE","CRITIQUE"])
-            w_by = st.text_input("Ajouté par (analyste)", placeholder="Analyste KYC")
-            w_sub = st.form_submit_button("➕ AJOUTER À LA WATCHLIST")
-            if w_sub and w_entity:
-                db_add_watchlist(w_entity, w_type, w_reason, w_risk, w_by)
-                st.success(f"✅ {w_entity} ajouté à la watchlist.")
-                st.rerun()
+                w_reason=st.text_area("Motif",height=68); w_risk=st.selectbox("Risque",["FAIBLE","MODERE","ELEVE","CRITIQUE"])
+            w_by=st.text_input("Ajouté par")
+            if st.form_submit_button("➕ AJOUTER") and w_entity:
+                db_add_watchlist(w_entity,w_type,w_reason,w_risk,w_by); st.success("✅ Ajouté."); st.rerun()
+        for w in db_get_watchlist():
+            wc1,wc2 = st.columns([5,1])
+            risk_c = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}.get(w["risk_level"],"badge-medium")
+            with wc1:
+                st.markdown(f"""<div class='result-row'>
+                <b>{w['entity']}</b> · <span class='{risk_c}'>{w['risk_level']}</span><br>
+                <small style='color:#5a6a7a;'>{w.get('entity_type','')} · {w['created_at'][:10]} · {w.get('added_by','')}</small><br>
+                <small>{w.get('reason','')}</small></div>""", unsafe_allow_html=True)
+            with wc2:
+                if st.button("🗑", key=f"del_watch_{w['id']}"):
+                    db_delete_watchlist(w["id"]); st.rerun()
 
-        st.markdown("### Entités sous surveillance")
-        watchlist = db_get_watchlist()
-        if watchlist:
-            for w in watchlist:
-                risk_c = {"FAIBLE":"badge-low","MODERE":"badge-medium","ELEVE":"badge-high","CRITIQUE":"badge-high"}.get(w["risk_level"],"badge-medium")
-                wc1, wc2 = st.columns([5,1])
-                with wc1:
-                    st.markdown(f"""
-                    <div class='result-row'>
-                      <b>{w['entity']}</b> · <span class='{risk_c}'>{w['risk_level']}</span><br>
-                      <small style='color:#5a6a7a;'>{w['entity_type']} · Ajouté le {w['created_at'][:10]} par {w.get('added_by','')}</small><br>
-                      <small>{w.get('reason','')}</small>
-                    </div>""", unsafe_allow_html=True)
-                with wc2:
-                    if st.button("🗑", key=f"del_watch_{w['id']}"):
-                        db_delete_watchlist(w["id"])
-                        st.rerun()
+    with ht3:
+        st.markdown("### Historique Excel")
+        st.markdown("""<div class='info-box'>
+        Le fichier Excel (<code>finshield_history.xlsx</code>) contient 3 onglets :
+        <b>Historique</b> (une ligne par analyse), <b>Alertes</b> (détail de chaque signal),
+        <b>Sources</b> (toutes les pages collectées).
+        Il est mis à jour automatiquement à chaque analyse.</div>""", unsafe_allow_html=True)
+        if os.path.exists(EXCEL_HISTORY_PATH):
+            with open(EXCEL_HISTORY_PATH,"rb") as f:
+                st.download_button("📥 Télécharger finshield_history.xlsx",
+                                   data=f.read(),
+                                   file_name="finshield_history.xlsx",
+                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            try:
+                wb_preview = load_workbook(EXCEL_HISTORY_PATH, data_only=True)
+                ws = wb_preview["Historique"]
+                data = list(ws.values)
+                if len(data) > 1:
+                    df_prev = pd.DataFrame(data[1:], columns=data[0])
+                    st.dataframe(df_prev, use_container_width=True, height=350)
+            except Exception as e: st.warning(f"Aperçu non disponible : {e}")
         else:
-            st.markdown("<div class='info-box'>Watchlist vide.</div>", unsafe_allow_html=True)
+            st.markdown("<div class='warn-box'>Aucun fichier Excel encore créé. Lancez une analyse OSINT.</div>", unsafe_allow_html=True)
