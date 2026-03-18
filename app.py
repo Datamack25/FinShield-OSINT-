@@ -559,23 +559,22 @@ NEGATIVE_KEYWORDS = [
 
 # Shared state dict — mutable, accessible everywhere without global
 _search_debug = {
-    "total_hits":    0,
-    "engines_used":  [],   # list of engine names that returned results
-    "errors":        [],   # list of error strings for debug
-    "last_results":  [],   # last batch of results (for live scroll display)
+    "total_hits":   0,
+    "engines_used": [],
+    "errors":       [],
+    "last_title":   "",
+    "last_engine":  "",
 }
 
-# ── Per-engine parsers ────────────────────────────────────────────
-
 def _parse_ddg(html: str, num: int) -> list:
-    """DuckDuckGo HTML — handles all known layout variants."""
+    """DuckDuckGo HTML — gère toutes les variantes de layout connues."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
     results = []
     for item in soup.select(".result, .web-result"):
         a = (item.find("a", class_="result__a")
              or item.find("a", attrs={"data-testid": "result-title-a"})
-             or item.find("h2") and item.find("h2").find("a"))
+             or (item.find("h2") and item.find("h2").find("a")))
         snip = (item.find("a",    class_="result__snippet")
                 or item.find("span", class_="result__snippet")
                 or item.find("div",  class_="result__snippet")
@@ -584,19 +583,19 @@ def _parse_ddg(html: str, num: int) -> list:
             href = a.get("href", "")
             if href.startswith("//"): href = "https:" + href
             if href.startswith("http"):
-                results.append({"title": a.get_text(strip=True),
-                                 "url":   href,
+                results.append({"title":   a.get_text(strip=True),
+                                 "url":     href,
                                  "snippet": snip.get_text(strip=True)[:300] if snip else "",
-                                 "engine": "DuckDuckGo"})
+                                 "engine":  "DuckDuckGo"})
         if len(results) >= num: break
     return results
 
 def _parse_bing(html: str, num: int) -> list:
-    """Bing HTML — handles all known layout variants."""
+    """Bing HTML — gère toutes les variantes de layout connues."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
     results = []
-    for li in soup.select("li.b_algo, li.b_ad, .b_algo"):
+    for li in soup.select("li.b_algo, .b_algo"):
         h2 = li.find("h2") or li.find("h3")
         a  = h2.find("a") if h2 else li.find("a")
         p  = (li.find("p")
@@ -606,10 +605,10 @@ def _parse_bing(html: str, num: int) -> list:
         if a:
             href = a.get("href", "")
             if href.startswith("http"):
-                results.append({"title": a.get_text(strip=True),
-                                 "url":   href,
+                results.append({"title":   a.get_text(strip=True),
+                                 "url":     href,
                                  "snippet": p.get_text(strip=True)[:300] if p else "",
-                                 "engine": "Bing"})
+                                 "engine":  "Bing"})
         if len(results) >= num: break
     return results
 
@@ -626,27 +625,15 @@ def _parse_brave(html: str, num: int) -> list:
         if a:
             href = a.get("href", "")
             if href.startswith("http"):
-                results.append({"title": a.get_text(strip=True),
-                                 "url":   href,
+                results.append({"title":   a.get_text(strip=True),
+                                 "url":     href,
                                  "snippet": desc.get_text(strip=True)[:300] if desc else "",
-                                 "engine": "Brave"})
+                                 "engine":  "Brave"})
         if len(results) >= num: break
     return results
 
-def _parse_google_json(data: dict, num: int) -> list:
-    """Parse Google via free SerpApi-compatible JSON (serper.dev / valueserp)."""
-    results = []
-    for item in data.get("organic_results", data.get("organic", []))[:num]:
-        href = item.get("link", item.get("url", ""))
-        if href.startswith("http"):
-            results.append({"title":   item.get("title", ""),
-                             "url":     href,
-                             "snippet": item.get("snippet", item.get("description", ""))[:300],
-                             "engine":  "Google"})
-    return results
-
 def _parse_mojeek(html: str, num: int) -> list:
-    """Mojeek — stable lightweight HTML."""
+    """Mojeek — HTML simple et stable."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
     results = []
@@ -661,138 +648,57 @@ def _parse_mojeek(html: str, num: int) -> list:
         if len(results) >= num: break
     return results
 
-def _parse_qwant(html: str, num: int) -> list:
-    """Qwant (moteur européen, RGPD-friendly)."""
-    from bs4 import BeautifulSoup
-    soup = BeautifulSoup(html, "html.parser")
-    results = []
-    for item in soup.select(".WebResult, .result__web, ._2YMY"):
-        a    = item.find("a", class_="external") or item.find("a")
-        desc = item.find("p") or item.find("div", class_="_1Hm3")
-        if a:
-            href = a.get("href", "")
-            if href.startswith("http"):
-                results.append({"title":   a.get_text(strip=True),
-                                 "url":     href,
-                                 "snippet": desc.get_text(strip=True)[:300] if desc else "",
-                                 "engine":  "Qwant"})
-        if len(results) >= num: break
-    return results
-
-def search_web(query: str, num: int = 5, google_api_key: str = "",
-               google_cx: str = "") -> list:
+def search_web(query: str, num: int = 5, **kwargs) -> list:
     """
-    Multi-engine parallel search — 6 engines:
-      1. Google Custom Search JSON API (si clé fournie — 100 req/jour gratuit)
-      2. DuckDuckGo HTML
-      3. Bing HTML
-      4. Brave Search HTML
-      5. Qwant (moteur européen)
-      6. Mojeek (fallback stable)
+    Recherche séquentielle multi-moteurs — 4 moteurs stables :
+      1. DuckDuckGo  (pas de tracking, bons résultats FR)
+      2. Bing        (index large, actualités)
+      3. Brave       (indépendant)
+      4. Mojeek      (fallback HTML fiable)
 
-    Tous les moteurs sont interrogés en parallèle via ThreadPoolExecutor.
-    Les résultats sont fusionnés et dédupliqués par URL.
+    Interroge tous les moteurs et fusionne les résultats.
+    Séquentiel = pas de race condition, pas de timeout global.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
     import random
-
-    ua_list = [
+    ua_pool = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
         "Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0",
     ]
-    ua = random.choice(ua_list)
-    hdrs = {
-        "User-Agent":      ua,
+    hdrs_base = {
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.7,en;q=0.6",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection":      "keep-alive",
         "DNT":             "1",
-        "Upgrade-Insecure-Requests": "1",
     }
     q = quote_plus(query)
-
-    def _fetch_ddg():
-        r = requests.get(f"https://html.duckduckgo.com/html/?q={q}&kl=fr-fr&kp=-1",
-                         headers=hdrs, timeout=15)
-        if r.status_code == 200 and len(r.text) > 500:
-            return _parse_ddg(r.text, num)
-        return []
-
-    def _fetch_bing():
-        r = requests.get(f"https://www.bing.com/search?q={q}&count={num+2}&mkt=fr-FR&setlang=fr",
-                         headers={**hdrs, "User-Agent": ua_list[2]}, timeout=15)
-        if r.status_code == 200 and len(r.text) > 500:
-            return _parse_bing(r.text, num)
-        return []
-
-    def _fetch_brave():
-        r = requests.get(f"https://search.brave.com/search?q={q}&source=web&lang=fr",
-                         headers={**hdrs, "User-Agent": ua_list[0]}, timeout=15)
-        if r.status_code == 200 and len(r.text) > 500:
-            return _parse_brave(r.text, num)
-        return []
-
-    def _fetch_qwant():
-        r = requests.get(
-            f"https://www.qwant.com/?q={q}&t=web&l=fr_FR&safesearch=0",
-            headers={**hdrs, "User-Agent": ua_list[1]}, timeout=15)
-        if r.status_code == 200 and len(r.text) > 500:
-            return _parse_qwant(r.text, num)
-        return []
-
-    def _fetch_mojeek():
-        r = requests.get(f"https://www.mojeek.com/search?q={q}&lang=fr",
-                         headers=hdrs, timeout=15)
-        if r.status_code == 200 and len(r.text) > 500:
-            return _parse_mojeek(r.text, num)
-        return []
-
-    def _fetch_google():
-        """Google Custom Search JSON API — 100 req/jour gratuit.
-        Clé gratuite sur https://developers.google.com/custom-search/v1/overview
-        CX (Search Engine ID) sur https://programmablesearchengine.google.com/
-        """
-        if not google_api_key or not google_cx:
-            return []
-        r = requests.get(
-            "https://www.googleapis.com/customsearch/v1",
-            params={"key": google_api_key, "cx": google_cx,
-                    "q": query, "num": min(num, 10), "hl": "fr", "gl": "fr"},
-            timeout=15)
-        if r.status_code == 200:
-            return _parse_google_json(r.json(), num)
-        return []
-
-    # ── Lancer tous les moteurs EN PARALLÈLE ──────────────────────
-    engine_fns = {
-        "Google":     _fetch_google,
-        "DuckDuckGo": _fetch_ddg,
-        "Bing":       _fetch_bing,
-        "Brave":      _fetch_brave,
-        "Qwant":      _fetch_qwant,
-        "Mojeek":     _fetch_mojeek,
-    }
-
     all_results = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = {executor.submit(fn): name for name, fn in engine_fns.items()}
-        for future in as_completed(futures, timeout=18):
-            name = futures[future]
-            try:
-                hits = future.result()
+
+    engines = [
+        ("DuckDuckGo", f"https://html.duckduckgo.com/html/?q={q}&kl=fr-fr&kp=-1",     _parse_ddg),
+        ("Bing",       f"https://www.bing.com/search?q={q}&count={num+2}&mkt=fr-FR",  _parse_bing),
+        ("Brave",      f"https://search.brave.com/search?q={q}&source=web&lang=fr",   _parse_brave),
+        ("Mojeek",     f"https://www.mojeek.com/search?q={q}&lang=fr",                _parse_mojeek),
+    ]
+
+    for name, url, parser in engines:
+        try:
+            ua = random.choice(ua_pool)
+            r  = requests.get(url, headers={**hdrs_base, "User-Agent": ua}, timeout=14)
+            if r.status_code == 200 and len(r.text) > 500:
+                hits = parser(r.text, num)
                 if hits:
                     all_results.extend(hits)
                     if name not in _search_debug["engines_used"]:
                         _search_debug["engines_used"].append(name)
-            except Exception as e:
-                _search_debug["errors"].append(f"{name}: {str(e)[:80]}")
+                    # garde la dernière info pour le feed live
+                    _search_debug["last_engine"] = name
+                    _search_debug["last_title"]  = hits[0].get("title", "")[:70]
+        except Exception as e:
+            _search_debug["errors"].append(f"{name}: {str(e)[:60]}")
 
-    # ── Dédoublonnage par URL, résultats Google en tête ───────────
-    order = ["Google", "DuckDuckGo", "Bing", "Brave", "Qwant", "Mojeek"]
-    all_results.sort(key=lambda x: order.index(x.get("engine","Mojeek"))
-                     if x.get("engine","") in order else 99)
+    # Dédoublonnage par URL
     seen, unique = set(), []
     for res in all_results:
         u = res.get("url", "")
@@ -800,8 +706,7 @@ def search_web(query: str, num: int = 5, google_api_key: str = "",
             seen.add(u); unique.append(res)
 
     batch = unique[:num]
-    _search_debug["total_hits"]   += len(batch)
-    _search_debug["last_results"]  = batch   # pour l'affichage défilant
+    _search_debug["total_hits"] += len(batch)
     return batch
 
 
@@ -1617,7 +1522,7 @@ with tab2:
         launch_btn = st.button("▶ LANCER LE SCREENING", key="btn_osint")
 
     with st.expander("⚙️ Options avancées"):
-        oa, ob, oc = st.columns(3)
+        oa, ob = st.columns(2)
         with oa:
             linked_iban  = st.text_input("IBAN lié (optionnel)", key="linked_iban")
             add_to_watch = st.checkbox("Ajouter à la surveillance après analyse")
@@ -1626,16 +1531,6 @@ with tab2:
                                               help="Plus = plus exhaustif mais plus lent")
             groq_key_tab = st.text_input("Clé Groq (optionnel)", type="password",
                                           placeholder="gsk_...", key="groq_tab")
-        with oc:
-            st.markdown("<div style='font-size:0.75rem;color:#5a6a7a;margin-bottom:4px;'>🔑 Google Custom Search API</div>", unsafe_allow_html=True)
-            google_api_key = st.text_input("Google API Key", type="password",
-                                            placeholder="AIza...", key="google_api_key",
-                                            help="Gratuit — 100 req/jour. Créer sur console.cloud.google.com")
-            google_cx = st.text_input("Google CX (Search Engine ID)",
-                                       placeholder="a1b2c3:xyz...", key="google_cx",
-                                       help="Créer sur programmablesearchengine.google.com")
-            if not google_api_key:
-                st.caption("Sans clé Google : DuckDuckGo, Bing, Brave, Qwant, Mojeek sont utilisés.")
 
     # Session state
     for k,v in [("osint_analysis",None),("osint_entity",""),("osint_iban_data",{}),
@@ -1652,23 +1547,19 @@ with tab2:
         os_result = check_opensanctions(entity)
         prog.progress(5)
 
-        # STEP 2 — Run all queries with live scrolling display
+        # STEP 2 — Run all queries avec affichage défilant en temps réel
         _search_debug["total_hits"]   = 0
         _search_debug["engines_used"] = []
         _search_debug["errors"]       = []
 
-        stat.markdown(f"🌐 **[2/4]** {len(QUERY_CATALOGUE)} requêtes — 6 moteurs en parallèle…")
+        stat.markdown(f"🌐 **[2/4]** {len(QUERY_CATALOGUE)} requêtes · DuckDuckGo · Bing · Brave · Mojeek…")
         all_results_with_meta = []
-
-        # Live scrolling feed: shows last results as they come in
         feed_placeholder = st.empty()
-        live_feed = []   # keeps last 6 results for display
+        live_feed = []   # garde les 8 dernières lignes affichées
 
         for i, (q_tpl, q_cat, q_grav, q_label) in enumerate(QUERY_CATALOGUE):
             q_str = q_tpl.format(e=entity)
-            hits  = search_web(q_str, num=nb_results_per_query,
-                               google_api_key=google_api_key or "",
-                               google_cx=google_cx or "")
+            hits  = search_web(q_str, num=nb_results_per_query)
             for h in hits:
                 h["query_cat"]     = q_cat
                 h["query_gravity"] = q_grav
@@ -1676,29 +1567,30 @@ with tab2:
             all_results_with_meta.extend(hits)
             prog.progress(5 + int((i+1)/len(QUERY_CATALOGUE)*55))
 
-            # ── Live scrolling feed ──────────────────────────────
-            for h in hits[-2:]:   # show up to 2 newest results
-                eng   = h.get("engine","?")
-                glyph = {"Google":"🔵","DuckDuckGo":"🟠","Bing":"🟦",
-                         "Brave":"🦁","Qwant":"🟣","Mojeek":"⚪"}.get(eng,"🔘")
-                grav_icon = {"eleve":"🔴","moyen":"🟡","faible":"🟢"}.get(q_grav,"⚪")
+            # ── Feed défilant : affiche les nouveaux résultats ────
+            grav_icon = {"eleve":"🔴","moyen":"🟡","faible":"🟢"}.get(q_grav,"⚪")
+            eng_icons = {"DuckDuckGo":"🟠","Bing":"🟦","Brave":"🦁","Mojeek":"⚪"}
+            for h in hits[-2:]:
+                eng  = h.get("engine","?")
+                icon = eng_icons.get(eng,"🔘")
+                title = h.get("title","")[:75]
+                url   = h.get("url","#")
                 live_feed.append(
-                    f"{glyph} **{eng}** &nbsp;|&nbsp; {grav_icon} `{q_label}` &nbsp;|&nbsp; "
-                    f"[{h.get('title','')[:70]}]({h.get('url','#')})"
+                    f"{icon} `{eng}` &nbsp;·&nbsp; {grav_icon} **{q_label}** "
+                    f"&nbsp;·&nbsp; [{title}]({url})"
                 )
-            live_feed = live_feed[-8:]  # keep last 8 lines
+            live_feed = live_feed[-8:]   # fenêtre glissante de 8 lignes
 
             engines_str = " · ".join(
-                f"{'🔵' if e=='Google' else '🟠' if e=='DuckDuckGo' else '🟦' if e=='Bing' else '🦁' if e=='Brave' else '🟣' if e=='Qwant' else '⚪'}{e}"
-                for e in _search_debug["engines_used"]
+                f"{eng_icons.get(e,'🔘')}{e}" for e in _search_debug["engines_used"]
             ) or "⏳ connexion…"
 
             feed_placeholder.markdown(
-                f"**Requête {i+1}/{len(QUERY_CATALOGUE)}** · "
-                f"**{len(all_results_with_meta)}** résultats bruts · "
-                f"Moteurs actifs : {engines_str}\n\n" +
+                f"**{i+1}/{len(QUERY_CATALOGUE)}** requêtes · "
+                f"**{len(all_results_with_meta)}** résultats · "
+                f"Moteurs : {engines_str}\n\n" +
                 "\n\n".join(live_feed),
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
             time.sleep(0.04)
 
